@@ -85,6 +85,7 @@ read_metadata() {
 			case "$key" in
 			commit) PREV_COMMIT="$value" ;;
 			version) PREV_VERSION="$value" ;;
+			# shellcheck disable=SC2034
 			built_at) PREV_BUILT_AT="$value" ;;
 			esac
 		done <"$META_FILE"
@@ -276,7 +277,9 @@ fetch_repo() {
 		git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$SRC_DIR"
 	else
 		if [[ -f "$SRC_DIR/codex-rs/Cargo.toml" ]]; then
-			(cd "$SRC_DIR" && git checkout -- codex-rs/Cargo.toml codex-rs/Cargo.lock >/dev/null 2>&1 || true)
+			if ! (cd "$SRC_DIR" && git checkout -- codex-rs/Cargo.toml codex-rs/Cargo.lock >/dev/null 2>&1); then
+				:
+			fi
 		fi
 		log "Updating repository at $SRC_DIR"
 		(cd "$SRC_DIR" && git fetch origin --tags --prune && git checkout "$BRANCH" && git pull --rebase --autostash)
@@ -377,9 +380,13 @@ verify() {
 
 report_path_conflicts() {
 	log "PATH resolution for 'codex':"
-	command -v codex >/dev/null 2>&1 && command -v codex || true
+	if command -v codex >/dev/null 2>&1; then
+		command -v codex
+	fi
 	if command -v which >/dev/null 2>&1; then
-		which -a codex >/dev/null 2>&1 && which -a codex || true
+		if which -a codex >/dev/null 2>&1; then
+			which -a codex
+		fi
 	fi
 }
 
