@@ -54,8 +54,7 @@ codex --wrapper-version
 ```
 
 Prefer prebuilt artifacts? Download the tarball from the
-[latest release](https://github.com/toxicwind/codex-updater/releases/latest) — it now includes the
-Linux amd64 Codex binary plus both scripts.
+[latest release](https://github.com/toxicwind/codex-updater/releases/latest) — it ships an LTO-optimized Linux amd64 Codex binary plus both scripts.
 
 ## 🛠 Wrapper flags & env knobs
 

@@ -8,31 +8,74 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: write
+    env:
+      SCCACHE_DIR: ${{ runner.temp }}/sccache
+      CODEX_INSTALL_PREFIX: ${{ runner.temp }}/codex-install
+      CODEX_WRAPPER_STATE_DIR: ${{ runner.temp }}/codex-wrapper
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_RELEASE_LTO: fat
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+      CARGO_PROFILE_RELEASE_PANIC: abort
+      CARGO_PROFILE_RELEASE_STRIP: symbols
+      RUSTFLAGS: -C target-cpu=x86-64-v2 -C linker=mold
+      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Restore cargo registry cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+      - name: Prepare codex target path
+        run: mkdir -p ~/.local/src/codex/codex-rs/target
+      - name: Restore codex target cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/src/codex/codex-rs/target
+          key: codex-target-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            codex-target-${{ runner.os }}-
       - name: Install system build deps
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev clang
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev clang mold sccache
+      - name: Prime sccache
+        run: |
+          mkdir -p "$SCCACHE_DIR"
+          sccache --version
+          sccache --stop-server || true
+          sccache --start-server
+          sccache --zero-stats
       - name: Build Codex via updater
-        env:
-          CODEX_WRAPPER_STATE_DIR: ${{ runner.temp }}/codex-wrapper
         run: |
           chmod +x codex-updater
           chmod +x codex
-          ./codex-updater --prefix "${RUNNER_TEMP}/codex-install"
+          ./codex-updater --prefix "$CODEX_INSTALL_PREFIX" --force-rebuild
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
       - name: Prepare release bundle
-        env:
-          STATE_DIR: ${{ runner.temp }}/codex-wrapper
         run: |
           set -euo pipefail
           mkdir -p dist
           cp codex codex-updater dist/
-          cp "${RUNNER_TEMP}/codex-install/bin/codex" dist/codex-linux-amd64
-          if [[ -f "${STATE_DIR}/build-info" ]]; then
-            cp "${STATE_DIR}/build-info" dist/
+          strip "$CODEX_INSTALL_PREFIX/bin/codex" || true
+          cp "$CODEX_INSTALL_PREFIX/bin/codex" dist/codex-linux-amd64
+          if [[ -f "$CODEX_WRAPPER_STATE_DIR/build-info" ]]; then
+            cp "$CODEX_WRAPPER_STATE_DIR/build-info" dist/
           fi
           tar -czf codex-updater-linux-amd64.tar.gz -C dist .
       - name: Publish release
