@@ -19,7 +19,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          profile: minimal
           override: true
       - name: Restore cargo registry cache
         uses: actions/cache@v4
@@ -28,13 +27,6 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
           key: cargo-${{ runner.os }}-global
-      - name: Prepare codex target path
-        run: mkdir -p ~/.local/src/codex/codex-rs/target
-      - name: Restore codex target cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/src/codex/codex-rs/target
-          key: codex-target-${{ runner.os }}-global
       - name: Install system build deps
         run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev clang mold sccache
       - name: Prime sccache
@@ -42,15 +34,15 @@ jobs:
           SCCACHE_DIR: ${{ runner.temp }}/sccache
         run: |
           mkdir -p "$SCCACHE_DIR"
-          sccache --version
           sccache --stop-server || true
           sccache --start-server
-          sccache --zero-stats
+          sccache --show-stats || true
       - name: Build Codex via updater
         env:
           SCCACHE_DIR: ${{ runner.temp }}/sccache
           CODEX_INSTALL_PREFIX: ${{ runner.temp }}/codex-install
           CODEX_WRAPPER_STATE_DIR: ${{ runner.temp }}/codex-wrapper
+          XDG_SRC_HOME: ${{ runner.temp }}/codex-src
           RUSTC_WRAPPER: sccache
           CARGO_INCREMENTAL: 0
           CARGO_PROFILE_RELEASE_LTO: fat
