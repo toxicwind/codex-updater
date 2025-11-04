@@ -20,22 +20,46 @@ BRANCH="$BRANCH_DEFAULT"
 PREFIX="$PREFIX_DEFAULT"
 
 while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --prefix) PREFIX="$2"; shift 2;;
-    --branch) BRANCH="$2"; shift 2;;
-    --repo)   REPO_URL="$2"; shift 2;;
-    --no-sudo) NO_SUDO=1; shift;;
-    --force-rebuild) FORCE_REBUILD=1; shift;;
-    --cc) CC_OVERRIDE="$2"; shift 2;;
-    --cxx) CXX_OVERRIDE="$2"; shift 2;;
-    -h|--help)
-      cat <<EOF
+	case "$1" in
+	--prefix)
+		PREFIX="$2"
+		shift 2
+		;;
+	--branch)
+		BRANCH="$2"
+		shift 2
+		;;
+	--repo)
+		REPO_URL="$2"
+		shift 2
+		;;
+	--no-sudo)
+		NO_SUDO=1
+		shift
+		;;
+	--force-rebuild)
+		FORCE_REBUILD=1
+		shift
+		;;
+	--cc)
+		CC_OVERRIDE="$2"
+		shift 2
+		;;
+	--cxx)
+		CXX_OVERRIDE="$2"
+		shift 2
+		;;
+	-h | --help)
+		cat <<EOF
 Usage: bash codex-install.sh [--prefix DIR] [--branch NAME] [--repo URL] [--no-sudo] [--force-rebuild] [--cc CC] [--cxx CXX]
 EOF
-      exit 0
-      ;;
-    *) err "Unknown argument: $1"; exit 2;;
-  esac
+		exit 0
+		;;
+	*)
+		err "Unknown argument: $1"
+		exit 2
+		;;
+	esac
 done
 
 BIN_DIR="$PREFIX/bin"
@@ -52,26 +76,26 @@ PREV_VERSION=""
 PREV_BUILT_AT=""
 
 read_metadata() {
-  PREV_COMMIT=""
-  PREV_VERSION=""
-  PREV_BUILT_AT=""
-  if [[ -f "$META_FILE" ]]; then
-    while IFS='=' read -r key value; do
-      [[ -n "${key:-}" ]] || continue
-      case "$key" in
-        commit) PREV_COMMIT="$value" ;;
-        version) PREV_VERSION="$value" ;;
-        built_at) PREV_BUILT_AT="$value" ;;
-      esac
-    done <"$META_FILE"
-  fi
+	PREV_COMMIT=""
+	PREV_VERSION=""
+	PREV_BUILT_AT=""
+	if [[ -f "$META_FILE" ]]; then
+		while IFS='=' read -r key value; do
+			[[ -n "${key:-}" ]] || continue
+			case "$key" in
+			commit) PREV_COMMIT="$value" ;;
+			version) PREV_VERSION="$value" ;;
+			built_at) PREV_BUILT_AT="$value" ;;
+			esac
+		done <"$META_FILE"
+	fi
 }
 
 write_metadata() {
-  local commit="$1"
-  local version="$2"
-  mkdir -p "$STATE_DIR"
-  cat >"$META_FILE" <<EOF
+	local commit="$1"
+	local version="$2"
+	mkdir -p "$STATE_DIR"
+	cat >"$META_FILE" <<EOF
 commit=$commit
 version=$version
 built_at=$(date +%s)
@@ -81,30 +105,30 @@ EOF
 }
 
 dist_path_for_commit() {
-  local commit="$1"
-  printf '%s/codex-%s' "$DIST_DIR" "$commit"
+	local commit="$1"
+	printf '%s/codex-%s' "$DIST_DIR" "$commit"
 }
 
 compute_build_version() {
-  local repo="$1"
-  local desc
-  desc="$(git -C "$repo" describe --tags --match 'rust-v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 HEAD 2>/dev/null || true)"
-  if [[ -n "$desc" ]]; then
-    printf '%s' "${desc#rust-v}"
-  else
-    printf '%s' "0.0.0"
-  fi
+	local repo="$1"
+	local desc
+	desc="$(git -C "$repo" describe --tags --match 'rust-v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 HEAD 2>/dev/null || true)"
+	if [[ -n "$desc" ]]; then
+		printf '%s' "${desc#rust-v}"
+	else
+		printf '%s' "0.0.0"
+	fi
 }
 
 set_workspace_version() {
-  local cargo_dir="$1"
-  local new_version="$2"
-  local cargo_file="$cargo_dir/Cargo.toml"
-  if [[ ! -f "$cargo_file" ]]; then
-    err "Cargo workspace manifest not found at $cargo_file"
-    return 1
-  fi
-  NEW_VERSION="$new_version" python3 - "$cargo_file" <<'PY'
+	local cargo_dir="$1"
+	local new_version="$2"
+	local cargo_file="$cargo_dir/Cargo.toml"
+	if [[ ! -f "$cargo_file" ]]; then
+		err "Cargo workspace manifest not found at $cargo_file"
+		return 1
+	fi
+	NEW_VERSION="$new_version" python3 - "$cargo_file" <<'PY'
 import os
 import sys
 from pathlib import Path
@@ -138,225 +162,238 @@ PY
 }
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
-do_sudo() { if [[ $NO_SUDO -eq 0 ]]; then sudo "$@"; else "$@"; fi }
+do_sudo() { if [[ $NO_SUDO -eq 0 ]]; then sudo "$@"; else "$@"; fi; }
 
 detect_pm() {
-  if need_cmd dnf5; then echo dnf5
-  elif need_cmd dnf; then echo dnf
-  elif need_cmd yum; then echo yum
-  elif need_cmd apt-get; then echo apt
-  elif need_cmd pacman; then echo pacman
-  elif need_cmd zypper; then echo zypper
-  elif need_cmd brew; then echo brew
-  else echo "unknown"
-  fi
+	if need_cmd dnf5; then
+		echo dnf5
+	elif need_cmd dnf; then
+		echo dnf
+	elif need_cmd yum; then
+		echo yum
+	elif need_cmd apt-get; then
+		echo apt
+	elif need_cmd pacman; then
+		echo pacman
+	elif need_cmd zypper; then
+		echo zypper
+	elif need_cmd brew; then
+		echo brew
+	else
+		echo "unknown"
+	fi
 }
 
 install_build_deps() {
-  local pm; pm="$(detect_pm)"
-  log "Detected package manager: $pm"
-  case "$pm" in
-    dnf5|dnf|yum)
-      do_sudo "${pm}" -y install gcc gcc-c++ clang make pkgconf openssl-devel git curl ca-certificates || true
-      ;;
-    apt)
-      do_sudo apt-get update -y
-      do_sudo apt-get install -y build-essential clang pkg-config libssl-dev git curl ca-certificates
-      ;;
-    pacman)
-      do_sudo pacman -Sy --noconfirm base-devel clang pkgconf openssl git curl ca-certificates
-      ;;
-    zypper)
-      do_sudo zypper refresh
-      do_sudo zypper install -y -t pattern devel_basis || true
-      do_sudo zypper install -y gcc gcc-c++ clang make pkgconf-pkg-config libopenssl-devel git curl ca-certificates
-      ;;
-    brew)
-      brew install llvm openssl@3 pkg-config git || true
-      ;;
-    *)
-      warn "Unknown package manager. Ensure compilers (gcc/clang), pkg-config, OpenSSL dev headers are installed."
-      ;;
-  esac
+	local pm
+	pm="$(detect_pm)"
+	log "Detected package manager: $pm"
+	case "$pm" in
+	dnf5 | dnf | yum)
+		do_sudo "${pm}" -y install gcc gcc-c++ clang make pkgconf openssl-devel git curl ca-certificates || true
+		;;
+	apt)
+		do_sudo apt-get update -y
+		do_sudo apt-get install -y build-essential clang pkg-config libssl-dev git curl ca-certificates
+		;;
+	pacman)
+		do_sudo pacman -Sy --noconfirm base-devel clang pkgconf openssl git curl ca-certificates
+		;;
+	zypper)
+		do_sudo zypper refresh
+		do_sudo zypper install -y -t pattern devel_basis || true
+		do_sudo zypper install -y gcc gcc-c++ clang make pkgconf-pkg-config libopenssl-devel git curl ca-certificates
+		;;
+	brew)
+		brew install llvm openssl@3 pkg-config git || true
+		;;
+	*)
+		warn "Unknown package manager. Ensure compilers (gcc/clang), pkg-config, OpenSSL dev headers are installed."
+		;;
+	esac
 }
 
 ensure_rust() {
-  if need_cmd cargo && need_cmd rustc; then
-    log "Rust toolchain detected: $(rustc --version)"
-  else
-    log "Installing Rust via rustup (non-interactive)"
-    curl -sSf https://sh.rustup.rs | sh -s -- -y
-    # shellcheck disable=SC1091
-    source "$HOME/.cargo/env"
-  fi
-  rustup toolchain install stable >/dev/null 2>&1 || true
-  rustup default stable >/dev/null 2>&1 || true
-  log "Using cargo: $(cargo --version)"
+	if need_cmd cargo && need_cmd rustc; then
+		log "Rust toolchain detected: $(rustc --version)"
+	else
+		log "Installing Rust via rustup (non-interactive)"
+		curl -sSf https://sh.rustup.rs | sh -s -- -y
+		# shellcheck disable=SC1091
+		source "$HOME/.cargo/env"
+	fi
+	rustup toolchain install stable >/dev/null 2>&1 || true
+	rustup default stable >/dev/null 2>&1 || true
+	log "Using cargo: $(cargo --version)"
 }
 
 ensure_paths() {
-  mkdir -p "$BIN_DIR" "$SRC_BASE"
-  case ":$PATH:" in
-    *":$BIN_DIR:"*) ;;
-    *) warn "Prefix bin ($BIN_DIR) is not in PATH. Add: export PATH=\"$BIN_DIR:\$PATH\"";;
-  esac
+	mkdir -p "$BIN_DIR" "$SRC_BASE"
+	case ":$PATH:" in
+	*":$BIN_DIR:"*) ;;
+	*) warn "Prefix bin ($BIN_DIR) is not in PATH. Add: export PATH=\"$BIN_DIR:\$PATH\"" ;;
+	esac
 }
 
 ensure_state_dirs() {
-  mkdir -p "$STATE_DIR" "$DIST_DIR"
+	mkdir -p "$STATE_DIR" "$DIST_DIR"
 }
 
 backup_existing() {
-  if [[ -x "$INSTALL_PATH" ]]; then
-    local ts; ts="$(date +%Y%m%d-%H%M%S)"
-    local backup="${INSTALL_PATH}.${ts}.bak"
-    log "Existing binary detected → backup: $backup"
-    cp -f "$INSTALL_PATH" "$backup"
-  fi
+	if [[ -x "$INSTALL_PATH" ]]; then
+		local ts
+		ts="$(date +%Y%m%d-%H%M%S)"
+		local backup="${INSTALL_PATH}.${ts}.bak"
+		log "Existing binary detected → backup: $backup"
+		cp -f "$INSTALL_PATH" "$backup"
+	fi
 }
 
 resolve_cc_cxx() {
-  # If CC/CXX envs point to missing tools (e.g., gcc14), clear them; prefer overrides, then gcc, then clang.
-  local cc_cur="${CC:-}"
-  local cxx_cur="${CXX:-}"
-  local cc=""
-  local cxx=""
-  if [[ -n "$CC_OVERRIDE" ]]; then cc="$CC_OVERRIDE"; elif [[ -n "$cc_cur" ]] && need_cmd "$cc_cur"; then cc="$cc_cur"; elif need_cmd gcc; then cc="gcc"; elif need_cmd clang; then cc="clang"; fi
-  if [[ -n "$CXX_OVERRIDE" ]]; then cxx="$CXX_OVERRIDE"; elif [[ -n "$cxx_cur" ]] && need_cmd "$cxx_cur"; then cxx="$cxx_cur"; elif need_cmd g++; then cxx="g++"; elif need_cmd clang++; then cxx="clang++"; fi
+	# If CC/CXX envs point to missing tools (e.g., gcc14), clear them; prefer overrides, then gcc, then clang.
+	local cc_cur="${CC:-}"
+	local cxx_cur="${CXX:-}"
+	local cc=""
+	local cxx=""
+	if [[ -n "$CC_OVERRIDE" ]]; then cc="$CC_OVERRIDE"; elif [[ -n "$cc_cur" ]] && need_cmd "$cc_cur"; then cc="$cc_cur"; elif need_cmd gcc; then cc="gcc"; elif need_cmd clang; then cc="clang"; fi
+	if [[ -n "$CXX_OVERRIDE" ]]; then cxx="$CXX_OVERRIDE"; elif [[ -n "$cxx_cur" ]] && need_cmd "$cxx_cur"; then cxx="$cxx_cur"; elif need_cmd g++; then cxx="g++"; elif need_cmd clang++; then cxx="clang++"; fi
 
-  if [[ -z "$cc" ]]; then err "No working C compiler found (checked CC env, gcc, clang)."; exit 1; fi
-  if [[ -z "$cxx" ]]; then warn "No working C++ compiler found; continuing with CC=$cc only."; fi
+	if [[ -z "$cc" ]]; then
+		err "No working C compiler found (checked CC env, gcc, clang)."
+		exit 1
+	fi
+	if [[ -z "$cxx" ]]; then warn "No working C++ compiler found; continuing with CC=$cc only."; fi
 
-  export CC="$cc"
-  if [[ -n "$cxx" ]]; then export CXX="$cxx"; fi
+	export CC="$cc"
+	if [[ -n "$cxx" ]]; then export CXX="$cxx"; fi
 
-  log "C toolchain → CC=${CC}${CXX:+ CXX=${CXX}}"
+	log "C toolchain → CC=${CC}${CXX:+ CXX=${CXX}}"
 }
 
 fetch_repo() {
-  if [[ ! -d "$SRC_DIR/.git" ]]; then
-    log "Cloning $REPO_URL → $SRC_DIR"
-    git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$SRC_DIR"
-  else
-    if [[ -f "$SRC_DIR/codex-rs/Cargo.toml" ]]; then
-      ( cd "$SRC_DIR" && git checkout -- codex-rs/Cargo.toml codex-rs/Cargo.lock >/dev/null 2>&1 || true )
-    fi
-    log "Updating repository at $SRC_DIR"
-    ( cd "$SRC_DIR" && git fetch origin --tags --prune && git checkout "$BRANCH" && git pull --rebase --autostash )
-  fi
+	if [[ ! -d "$SRC_DIR/.git" ]]; then
+		log "Cloning $REPO_URL → $SRC_DIR"
+		git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$SRC_DIR"
+	else
+		if [[ -f "$SRC_DIR/codex-rs/Cargo.toml" ]]; then
+			(cd "$SRC_DIR" && git checkout -- codex-rs/Cargo.toml codex-rs/Cargo.lock >/dev/null 2>&1 || true)
+		fi
+		log "Updating repository at $SRC_DIR"
+		(cd "$SRC_DIR" && git fetch origin --tags --prune && git checkout "$BRANCH" && git pull --rebase --autostash)
+	fi
 }
 
 build_and_install() {
-  local build_dir
-  if [[ -d "$SRC_DIR/codex-rs" ]]; then
-    build_dir="$SRC_DIR/codex-rs"
-  else
-    build_dir="$SRC_DIR"
-  fi
+	local build_dir
+	if [[ -d "$SRC_DIR/codex-rs" ]]; then
+		build_dir="$SRC_DIR/codex-rs"
+	else
+		build_dir="$SRC_DIR"
+	fi
 
-  local git_root="$build_dir"
-  if [[ -d "$SRC_DIR/.git" ]]; then
-    git_root="$SRC_DIR"
-  fi
+	local git_root="$build_dir"
+	if [[ -d "$SRC_DIR/.git" ]]; then
+		git_root="$SRC_DIR"
+	fi
 
-  ensure_state_dirs
-  read_metadata
+	ensure_state_dirs
+	read_metadata
 
-  local head_commit
-  head_commit="$(git -C "$git_root" rev-parse HEAD)"
-  if [[ -z "$head_commit" ]]; then
-    err "Unable to determine current commit hash."
-    exit 1
-  fi
-  local short_commit="${head_commit:0:12}"
-  local version
-  version="$(compute_build_version "$git_root")"
-  local dist_target
-  dist_target="$(dist_path_for_commit "$head_commit")"
+	local head_commit
+	head_commit="$(git -C "$git_root" rev-parse HEAD)"
+	if [[ -z "$head_commit" ]]; then
+		err "Unable to determine current commit hash."
+		exit 1
+	fi
+	local short_commit="${head_commit:0:12}"
+	local version
+	version="$(compute_build_version "$git_root")"
+	local dist_target
+	dist_target="$(dist_path_for_commit "$head_commit")"
 
-  if [[ $FORCE_REBUILD -ne 1 && "$PREV_COMMIT" == "$head_commit" ]]; then
-    if [[ -x "$INSTALL_PATH" ]]; then
-      log "No upstream changes (commit $short_commit); reusing existing binary."
-      write_metadata "$head_commit" "${PREV_VERSION:-$version}"
-      if [[ ! -x "$dist_target" ]]; then
-        install -Dm0755 "$INSTALL_PATH" "$dist_target"
-      fi
-      ln -sfn "$dist_target" "$DIST_DIR/latest"
-      return 0
-    elif [[ -x "$dist_target" ]]; then
-      log "Binary missing but cached artifact found for commit $short_commit; reinstalling."
-      backup_existing
-      install -Dm0755 "$dist_target" "$INSTALL_PATH"
-      write_metadata "$head_commit" "${PREV_VERSION:-$version}"
-      ln -sfn "$dist_target" "$DIST_DIR/latest"
-      return 0
-    else
-      log "Commit unchanged but install missing; rebuilding."
-    fi
-  fi
+	if [[ $FORCE_REBUILD -ne 1 && "$PREV_COMMIT" == "$head_commit" ]]; then
+		if [[ -x "$INSTALL_PATH" ]]; then
+			log "No upstream changes (commit $short_commit); reusing existing binary."
+			write_metadata "$head_commit" "${PREV_VERSION:-$version}"
+			if [[ ! -x "$dist_target" ]]; then
+				install -Dm0755 "$INSTALL_PATH" "$dist_target"
+			fi
+			ln -sfn "$dist_target" "$DIST_DIR/latest"
+			return 0
+		elif [[ -x "$dist_target" ]]; then
+			log "Binary missing but cached artifact found for commit $short_commit; reinstalling."
+			backup_existing
+			install -Dm0755 "$dist_target" "$INSTALL_PATH"
+			write_metadata "$head_commit" "${PREV_VERSION:-$version}"
+			ln -sfn "$dist_target" "$DIST_DIR/latest"
+			return 0
+		else
+			log "Commit unchanged but install missing; rebuilding."
+		fi
+	fi
 
-  log "Building commit $short_commit (version $version) in: $build_dir"
+	log "Building commit $short_commit (version $version) in: $build_dir"
 
-  (
-    set -euo pipefail
-    cd "$build_dir"
-    set_workspace_version "$build_dir" "$version"
-    trap 'git checkout -- Cargo.toml Cargo.lock >/dev/null 2>&1 || true' EXIT
-    if [[ $FORCE_REBUILD -eq 1 ]]; then
-      cargo clean
-    fi
-    cargo build --release
-  )
+	(
+		set -euo pipefail
+		cd "$build_dir"
+		set_workspace_version "$build_dir" "$version"
+		trap 'git checkout -- Cargo.toml Cargo.lock >/dev/null 2>&1 || true' EXIT
+		if [[ $FORCE_REBUILD -eq 1 ]]; then
+			cargo clean
+		fi
+		cargo build --release
+	)
 
-  local bin_candidate
-  bin_candidate="$(find "$build_dir/target/release" -maxdepth 1 -type f -executable -name 'codex' | head -n1 || true)"
-  if [[ -z "$bin_candidate" ]]; then
-    err "Build succeeded but 'codex' binary not found. Check workspace layout."
-    exit 1
-  fi
+	local bin_candidate
+	bin_candidate="$(find "$build_dir/target/release" -maxdepth 1 -type f -executable -name 'codex' | head -n1 || true)"
+	if [[ -z "$bin_candidate" ]]; then
+		err "Build succeeded but 'codex' binary not found. Check workspace layout."
+		exit 1
+	fi
 
-  install -Dm0755 "$bin_candidate" "$dist_target"
-  ln -sfn "$dist_target" "$DIST_DIR/latest"
+	install -Dm0755 "$bin_candidate" "$dist_target"
+	ln -sfn "$dist_target" "$DIST_DIR/latest"
 
-  backup_existing
-  install -Dm0755 "$dist_target" "$INSTALL_PATH"
-  write_metadata "$head_commit" "$version"
-  log "Installed → $INSTALL_PATH (commit $short_commit, version $version)"
+	backup_existing
+	install -Dm0755 "$dist_target" "$INSTALL_PATH"
+	write_metadata "$head_commit" "$version"
+	log "Installed → $INSTALL_PATH (commit $short_commit, version $version)"
 }
 
 verify() {
-  if [[ -x "$INSTALL_PATH" ]]; then
-    log "Version: $("$INSTALL_PATH" --version || echo 'unknown')"
-    if "$INSTALL_PATH" --help >/dev/null 2>&1; then
-      log "Self-test: OK"
-    else
-      warn "Self-test: FAIL (but binary exists)."
-    fi
-  else
-    err "Install not found at $INSTALL_PATH"
-    exit 1
-  fi
+	if [[ -x "$INSTALL_PATH" ]]; then
+		log "Version: $("$INSTALL_PATH" --version || echo 'unknown')"
+		if "$INSTALL_PATH" --help >/dev/null 2>&1; then
+			log "Self-test: OK"
+		else
+			warn "Self-test: FAIL (but binary exists)."
+		fi
+	else
+		err "Install not found at $INSTALL_PATH"
+		exit 1
+	fi
 }
 
 report_path_conflicts() {
-  log "PATH resolution for 'codex':"
-  command -v codex >/dev/null 2>&1 && command -v codex || true
-  if command -v which >/dev/null 2>&1; then
-    which -a codex >/dev/null 2>&1 && which -a codex || true
-  fi
+	log "PATH resolution for 'codex':"
+	command -v codex >/dev/null 2>&1 && command -v codex || true
+	if command -v which >/dev/null 2>&1; then
+		which -a codex >/dev/null 2>&1 && which -a codex || true
+	fi
 }
 
 main() {
-  log "Starting installer (repo=$REPO_URL, branch=$BRANCH, prefix=$PREFIX)"
-  install_build_deps
-  ensure_rust
-  ensure_paths
-  resolve_cc_cxx
-  fetch_repo
-  build_and_install
-  verify
-  report_path_conflicts
-  log "Done."
+	log "Starting installer (repo=$REPO_URL, branch=$BRANCH, prefix=$PREFIX)"
+	install_build_deps
+	ensure_rust
+	ensure_paths
+	resolve_cc_cxx
+	fetch_repo
+	build_and_install
+	verify
+	report_path_conflicts
+	log "Done."
 }
 
 main "$@"

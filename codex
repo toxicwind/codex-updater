@@ -24,16 +24,16 @@ BUILD_BRANCH=""
 BUILD_REPO=""
 
 log_err() {
-  printf '[codex-wrapper] %s\n' "$*" >&2
+	printf '[codex-wrapper] %s\n' "$*" >&2
 }
 
 log_event() {
-  mkdir -p "$LOG_DIR"
-  printf '%s | %s\n' "$(date "$TIMESTAMP_FORMAT")" "$*" >> "$LOG_FILE"
+	mkdir -p "$LOG_DIR"
+	printf '%s | %s\n' "$(date "$TIMESTAMP_FORMAT")" "$*" >>"$LOG_FILE"
 }
 
 usage() {
-  cat <<'USAGE'
+	cat <<'USAGE'
 Usage: codex [--wrapper-update] [--wrapper-rebuild] [--wrapper-no-update] [codex-args...]
 
 Wrapper flags:
@@ -53,163 +53,164 @@ USAGE
 }
 
 read_build_metadata() {
-  BUILD_COMMIT=""
-  BUILD_VERSION=""
-  BUILD_BUILT_AT=""
-  BUILD_BRANCH=""
-  BUILD_REPO=""
-  if [[ ! -f "$META_FILE" ]]; then
-    return 1
-  fi
-  while IFS='=' read -r key value; do
-    case "$key" in
-      commit) BUILD_COMMIT="$value" ;;
-      version) BUILD_VERSION="$value" ;;
-      built_at) BUILD_BUILT_AT="$value" ;;
-      branch) BUILD_BRANCH="$value" ;;
-      repo) BUILD_REPO="$value" ;;
-    esac
-  done <"$META_FILE"
-  [[ -n "$BUILD_COMMIT" || -n "$BUILD_VERSION" ]]
+	BUILD_COMMIT=""
+	BUILD_VERSION=""
+	BUILD_BUILT_AT=""
+	BUILD_BRANCH=""
+	BUILD_REPO=""
+	if [[ ! -f "$META_FILE" ]]; then
+		return 1
+	fi
+	while IFS='=' read -r key value; do
+		case "$key" in
+		commit) BUILD_COMMIT="$value" ;;
+		version) BUILD_VERSION="$value" ;;
+		built_at) BUILD_BUILT_AT="$value" ;;
+		branch) BUILD_BRANCH="$value" ;;
+		repo) BUILD_REPO="$value" ;;
+		esac
+	done <"$META_FILE"
+	[[ -n "$BUILD_COMMIT" || -n "$BUILD_VERSION" ]]
 }
 
 print_build_metadata() {
-  if read_build_metadata; then
-    local when="unknown"
-    if [[ -n "$BUILD_BUILT_AT" ]]; then
-      if when="$(date -u -d "@$BUILD_BUILT_AT" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
-        :
-      elif when="$(date -u -r "$BUILD_BUILT_AT" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
-        :
-      else
-        when="$BUILD_BUILT_AT"
-      fi
-    fi
-    printf 'codex version: %s\n' "${BUILD_VERSION:-unknown}"
-    printf 'commit:        %s\n' "${BUILD_COMMIT:-unknown}"
-    printf 'branch:        %s\n' "${BUILD_BRANCH:-unknown}"
-    printf 'source repo:   %s\n' "${BUILD_REPO:-unknown}"
-    printf 'built at:      %s\n' "$when"
-    if [[ -f "$DIST_DIR/latest" || -d "$DIST_DIR" ]]; then
-      printf 'dist dir:      %s\n' "$DIST_DIR"
-    fi
-  else
-    printf 'No build metadata recorded yet.\n'
-  fi
+	if read_build_metadata; then
+		local when="unknown"
+		if [[ -n "$BUILD_BUILT_AT" ]]; then
+			if when="$(date -u -d "@$BUILD_BUILT_AT" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
+				:
+			elif when="$(date -u -r "$BUILD_BUILT_AT" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
+				:
+			else
+				when="$BUILD_BUILT_AT"
+			fi
+		fi
+		printf 'codex version: %s\n' "${BUILD_VERSION:-unknown}"
+		printf 'commit:        %s\n' "${BUILD_COMMIT:-unknown}"
+		printf 'branch:        %s\n' "${BUILD_BRANCH:-unknown}"
+		printf 'source repo:   %s\n' "${BUILD_REPO:-unknown}"
+		printf 'built at:      %s\n' "$when"
+		if [[ -f "$DIST_DIR/latest" || -d "$DIST_DIR" ]]; then
+			printf 'dist dir:      %s\n' "$DIST_DIR"
+		fi
+	else
+		printf 'No build metadata recorded yet.\n'
+	fi
 }
 
 run_updater() {
-  if [[ ! -x "$UPDATER" ]]; then
-    log_err "Updater not found at $UPDATER"
-    return 1
-  fi
+	if [[ ! -x "$UPDATER" ]]; then
+		log_err "Updater not found at $UPDATER"
+		return 1
+	fi
 
-  mkdir -p "$STATE_DIR"
-  log_event "updater start: $UPDATER $*"
-  if "$UPDATER" "$@"; then
-    log_event "updater success"
-    if read_build_metadata; then
-      log_event "build metadata: version=${BUILD_VERSION:-unknown} commit=${BUILD_COMMIT:0:12}"
-    fi
-    date +%s >"$STAMP_FILE"
-  else
-    rc=$?
-    log_event "updater failure rc=$rc"
-    return "$rc"
-  fi
+	mkdir -p "$STATE_DIR"
+	log_event "updater start: $UPDATER $*"
+	if "$UPDATER" "$@"; then
+		log_event "updater success"
+		if read_build_metadata; then
+			log_event "build metadata: version=${BUILD_VERSION:-unknown} commit=${BUILD_COMMIT:0:12}"
+		fi
+		date +%s >"$STAMP_FILE"
+	else
+		rc=$?
+		log_event "updater failure rc=$rc"
+		return "$rc"
+	fi
 }
 
 maybe_auto_update() {
-  local skip="$1"; shift || true
-  local -a updater_args=("$@")
+	local skip="$1"
+	shift || true
+	local -a updater_args=("$@")
 
-  if [[ "$skip" == "1" ]]; then
-    return 0
-  fi
+	if [[ "$skip" == "1" ]]; then
+		return 0
+	fi
 
-  if [[ "$AUTO_PREF" != "1" ]]; then
-    return 0
-  fi
+	if [[ "$AUTO_PREF" != "1" ]]; then
+		return 0
+	fi
 
-  if [[ ! -f "$STAMP_FILE" ]]; then
-    run_updater "${updater_args[@]}"
-    return $?
-  fi
+	if [[ ! -f "$STAMP_FILE" ]]; then
+		run_updater "${updater_args[@]}"
+		return $?
+	fi
 
-  local last
-  if ! last=$(<"$STAMP_FILE"); then
-    run_updater "${updater_args[@]}"
-    return $?
-  fi
+	local last
+	if ! last=$(<"$STAMP_FILE"); then
+		run_updater "${updater_args[@]}"
+		return $?
+	fi
 
-  local now
-  now=$(date +%s)
-  if [[ $(( now - last )) -ge "$AUTO_INTERVAL" ]]; then
-    run_updater "${updater_args[@]}"
-  fi
+	local now
+	now=$(date +%s)
+	if [[ $((now - last)) -ge "$AUTO_INTERVAL" ]]; then
+		run_updater "${updater_args[@]}"
+	fi
 }
 
 main() {
-  mkdir -p "$STATE_DIR" "$DIST_DIR"
+	mkdir -p "$STATE_DIR" "$DIST_DIR"
 
-  local run_update=0
-  local skip_auto=0
-  declare -a updater_args=()
-  declare -a codex_args=()
+	local run_update=0
+	local skip_auto=0
+	declare -a updater_args=()
+	declare -a codex_args=()
 
-  while (($#)); do
-    case "$1" in
-      --wrapper-update)
-        run_update=1
-        ;;
-      --wrapper-rebuild)
-        run_update=1
-        updater_args+=(--force-rebuild)
-        ;;
-      --wrapper-no-update)
-        skip_auto=1
-        ;;
-      --wrapper-help)
-        usage
-        return 0
-        ;;
-      --wrapper-print-target)
-        printf '%s\n' "$REAL_BIN"
-        return 0
-        ;;
-      --wrapper-version)
-        print_build_metadata
-        return 0
-        ;;
-      --)
-        shift
-        codex_args+=("$@")
-        break
-        ;;
-      *)
-        codex_args+=("$1")
-        ;;
-    esac
-    shift || true
-  done
+	while (($#)); do
+		case "$1" in
+		--wrapper-update)
+			run_update=1
+			;;
+		--wrapper-rebuild)
+			run_update=1
+			updater_args+=(--force-rebuild)
+			;;
+		--wrapper-no-update)
+			skip_auto=1
+			;;
+		--wrapper-help)
+			usage
+			return 0
+			;;
+		--wrapper-print-target)
+			printf '%s\n' "$REAL_BIN"
+			return 0
+			;;
+		--wrapper-version)
+			print_build_metadata
+			return 0
+			;;
+		--)
+			shift
+			codex_args+=("$@")
+			break
+			;;
+		*)
+			codex_args+=("$1")
+			;;
+		esac
+		shift || true
+	done
 
-  if [[ ! -x "$REAL_BIN" ]]; then
-    log_err "Missing codex binary at $REAL_BIN; running updater"
-    run_update=1
-  fi
+	if [[ ! -x "$REAL_BIN" ]]; then
+		log_err "Missing codex binary at $REAL_BIN; running updater"
+		run_update=1
+	fi
 
-  if (( run_update )); then
-    run_updater "${updater_args[@]}"
-  else
-    maybe_auto_update "$skip_auto" "${updater_args[@]}"
-  fi
+	if ((run_update)); then
+		run_updater "${updater_args[@]}"
+	else
+		maybe_auto_update "$skip_auto" "${updater_args[@]}"
+	fi
 
-  if [[ ! -x "$REAL_BIN" ]]; then
-    log_err "codex binary still missing at $REAL_BIN"
-    return 127
-  fi
+	if [[ ! -x "$REAL_BIN" ]]; then
+		log_err "codex binary still missing at $REAL_BIN"
+		return 127
+	fi
 
-  exec "$REAL_BIN" "${codex_args[@]}"
+	exec "$REAL_BIN" "${codex_args[@]}"
 }
 
 main "$@"
