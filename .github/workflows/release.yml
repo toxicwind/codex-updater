@@ -14,13 +14,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Build archive
-        run: git archive --format=tar.gz --output=codex-updater.tar.gz HEAD
+      - name: Install system build deps
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev clang
+      - name: Build Codex via updater
+        env:
+          CODEX_WRAPPER_STATE_DIR: ${{ runner.temp }}/codex-wrapper
+        run: |
+          chmod +x codex-updater
+          chmod +x codex
+          ./codex-updater --prefix "${RUNNER_TEMP}/codex-install"
+      - name: Prepare release bundle
+        env:
+          STATE_DIR: ${{ runner.temp }}/codex-wrapper
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp codex codex-updater dist/
+          cp "${RUNNER_TEMP}/codex-install/bin/codex" dist/codex-linux-amd64
+          if [[ -f "${STATE_DIR}/build-info" ]]; then
+            cp "${STATE_DIR}/build-info" dist/
+          fi
+          tar -czf codex-updater-linux-amd64.tar.gz -C dist .
       - name: Publish release
         uses: ncipollo/release-action@v1
         with:
           tag: latest
           name: Latest
           allowUpdates: true
-          artifacts: codex-updater.tar.gz
+          replacesArtifacts: true
+          removeArtifacts: true
+          artifacts: codex-updater-linux-amd64.tar.gz
           artifactContentType: application/gzip
