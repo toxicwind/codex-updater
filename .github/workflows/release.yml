@@ -28,7 +28,7 @@ jobs:
             ~/.cargo/git
           key: cargo-${{ runner.os }}-global
       - name: Install system build deps
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev clang mold sccache
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev clang sccache
       - name: Prime sccache
         env:
           SCCACHE_DIR: ${{ runner.temp }}/sccache
@@ -49,7 +49,7 @@ jobs:
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
           CARGO_PROFILE_RELEASE_PANIC: abort
           CARGO_PROFILE_RELEASE_STRIP: symbols
-          RUSTFLAGS: -C target-cpu=x86-64-v2 -C linker=mold
+          RUSTFLAGS: -C target-cpu=x86-64-v2
         run: |
           chmod +x codex-updater
           chmod +x codex
