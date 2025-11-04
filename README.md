@@ -2,7 +2,7 @@
 
 # Codex Updater ♻️
 
-**Commit-aware build + wrapper for the OpenAI Codex CLI.**
+**Self-maintaining build + wrapper toolkit for the OpenAI Codex CLI.**
 
 [![License: WTFPL](https://img.shields.io/badge/license-WTFPL-magenta.svg)](LICENSE)
 [![CI](https://github.com/toxicwind/codex-updater/actions/workflows/ci.yml/badge.svg)](https://github.com/toxicwind/codex-updater/actions/workflows/ci.yml)
@@ -10,66 +10,86 @@
 
 </div>
 
-## Why
+Codex Updater is the home for the `codex` CLI wrapper and its build system. It keeps
+track of upstream commits, stamps builds with real version tags, and leaves behind
+logs + metadata so you can see exactly what runs in production.
 
-The stock `codex` installer rebuilds from scratch every run and forgets which commit you already built. This project adds:
+## ✨ Highlights
 
-- **Commit-aware caching** — skip rebuilds when upstream hasn’t moved.
-- **Tag-stamped binaries** — auto-sync `Cargo.toml` version with the latest `rust-v*` tag.
-- **Wrapper tooling** — `codex` shim adds auto-update flags, metadata output, and logging hooks.
+- **Commit-aware builds** – reuse cached binaries when the upstream commit is unchanged.
+- **Tag synchronized** – workspace `Cargo.toml` is rewritten to the latest `rust-v*`
+  tag before every build so the CLI reports accurate versions.
+- **Wrapper ergonomics** – `codex` shim adds auto-update toggles, metadata reports,
+  and integrates cleanly with `PATH`-first helper directories.
+- **Auditable by design** – logs land in `~/logs/codex-wrapper.log` and build metadata
+  lives under `~/.local/share/codex-wrapper/` for forensics.
 
-## What’s inside
+## 📦 Repository layout
 
 ```
-codex-updater   # build + install script (bash)
-codex           # wrapper shim, sits first on PATH
+README.md          # you are here
+codex-updater      # build + install script (Bash)
+codex              # wrapper shim that delegates to the real binary
+docs/              # (reserved) future docs & diagrams
+.github/           # CI + release workflows, issue templates
 ```
 
-Both scripts are portable Bash (5.0+). Drop them in `~/.local/bin-core` or wherever you keep first-on-PATH helpers.
-
-## Install
+## 🚀 Quickstart
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/toxicwind/codex-updater/main/codex-updater
-curl -fsSLO https://raw.githubusercontent.com/toxicwind/codex-updater/main/codex
+# Clone
+git clone https://github.com/toxicwind/codex-updater.git
+cd codex-updater
+
+# Install locally (first-on-PATH helpers)
 chmod +x codex codex-updater
-mv codex codex-updater ~/.local/bin-core/
+mkdir -p ~/.local/bin-core
+cp codex codex-updater ~/.local/bin-core/
+
+# Run
+codex --wrapper-version
 ```
 
-Optional: grab the tarball from the [latest release](https://github.com/toxicwind/codex-updater/releases/latest).
+Prefer piping from the release? Grab the tarball from the
+[latest release](https://github.com/toxicwind/codex-updater/releases/latest)
+and extract into your helper directory.
 
-## Usage
-
-Run the wrapper exactly like the original CLI:
-
-```bash
-codex --help
-```
-
-Wrapper-only flags:
+## 🧰 Wrapper flags
 
 | Flag | Description |
 | --- | --- |
-| `--wrapper-update` | Force an update before running `codex`. |
-| `--wrapper-rebuild` | Force rebuild (cargo clean) + update. |
-| `--wrapper-no-update` | Skip auto-updates even if enabled via env. |
-| `--wrapper-version` | Print cached build metadata & exit. |
-| `--wrapper-print-target` | Show the delegated binary path. |
+| `--wrapper-update` | Run the updater before launching the CLI. |
+| `--wrapper-rebuild` | Force a `cargo clean` + rebuild even if commit cached. |
+| `--wrapper-no-update` | Skip auto-updates for this invocation. |
+| `--wrapper-version` | Print cached commit/version metadata and exit. |
+| `--wrapper-print-target` | Output the delegated binary path. |
 
 Environment knobs:
 
-- `CODEX_WRAPPER_AUTO_UPDATE=1` — turn on background updates (default interval 24h).
-- `CODEX_WRAPPER_AUTO_INTERVAL=3600` — change the auto-update interval (seconds).
-- `CODEX_UPDATER` / `CODEX_BIN` — override paths for custom layouts.
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `CODEX_WRAPPER_AUTO_UPDATE` | Enable background auto-update checks | `0` |
+| `CODEX_WRAPPER_AUTO_INTERVAL` | Seconds between auto-updates | `86400` |
+| `CODEX_UPDATER` | Override updater script path | `~/.local/bin-core/codex-updater` |
+| `CODEX_BIN` | Override installed binary path | `~/.local/bin/codex` |
 
-Logs land in `~/logs/codex-wrapper.log`, metadata in `~/.local/share/codex-wrapper/`.
+## 🧪 CI & Releases
 
-## Release automation
+- **CI (`ci.yml`)** runs `shfmt`, `shellcheck`, and optional Bats specs.
+- **Release (`release.yml`)** archives `HEAD` on every push to `main` (or manual dispatch)
+  and updates the `latest` tag with a fresh `codex-updater.tar.gz` artifact.
 
-- **CI**: shfmt + shellcheck + bats
-- **Release**: `latest` tag updated on every push to main with a fresh tarball artifact.
+## 🤝 Contributing
 
-## License
+See [CONTRIBUTING.md](CONTRIBUTING.md). PRs, issues, and discussions are welcome.
+Always run `make check` before opening a pull request.
 
-[WTFPL](LICENSE) — do what the ♥️ you want.
+## 🔐 Security
 
+Report vulnerabilities privately via the GitHub security advisory flow or
+security@hypebrut.sh. Public issues are fine for non-sensitive bugs.
+
+## 📜 License
+
+Released under the [Do What The Fuck You Want To Public License](LICENSE).
+Enjoy, remix, and share improvements.
