@@ -1,0 +1,42 @@
+name: Bug report
+description: Report an issue with codex-updater or the wrapper shim.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Command...
+        2. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / metadata
+      description: Paste relevant lines from `~/logs/codex-wrapper.log` or `codex --wrapper-version`.
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Pre-flight
+      options:
+        - label: Latest main branch
+          required: true
+        - label: Searched for duplicates
+          required: true

@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt bats
+      - name: shfmt
+        run: shfmt -d codex codex-updater
+      - name: shellcheck
+        run: shellcheck codex codex-updater
+      - name: bats (optional)
+        run: |
+          if [ -d tests ]; then
+            bats tests
+          else
+            echo "no tests";
+          fi

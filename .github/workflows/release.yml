@@ -1,0 +1,26 @@
+name: Release Latest
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build archive
+        run: git archive --format=tar.gz --output=codex-updater.tar.gz HEAD
+      - name: Publish release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: latest
+          name: Latest
+          allowUpdates: true
+          artifacts: codex-updater.tar.gz
+          artifactContentType: application/gzip
