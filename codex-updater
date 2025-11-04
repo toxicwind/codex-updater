@@ -85,11 +85,11 @@ read_metadata() {
 			case "$key" in
 			commit) PREV_COMMIT="$value" ;;
 			version) PREV_VERSION="$value" ;;
-			# shellcheck disable=SC2034
 			built_at) PREV_BUILT_AT="$value" ;;
 			esac
 		done <"$META_FILE"
 	fi
+	: "${PREV_BUILT_AT:=}"
 }
 
 write_metadata() {
