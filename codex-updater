@@ -252,7 +252,8 @@ compute_build_version() {
 }
 
 set_workspace_version() {
-  local cargo_dir="$1" new_version="$2" cargo_file="$cargo_dir/Cargo.toml"
+  local cargo_dir="" new_version=""
+  local cargo_file="/Cargo.toml"
   if [[ ! -f "$cargo_file" ]]; then
     err "Cargo workspace manifest not found at $cargo_file"
     return 1
@@ -357,7 +358,9 @@ build_and_install() {
     cd "$build_dir"
     set_workspace_version "$build_dir" "$version"
     trap 'git checkout -- Cargo.toml Cargo.lock >/dev/null 2>&1 || true' EXIT
-    [[ $FORCE_REBUILD -eq 1 ]] && cargo clean || true
+    if [[  -eq 1 ]]; then
+    cargo clean || true
+  fi
     cargo build --release
   )
 
@@ -391,7 +394,9 @@ verify() {
 
 report_path_conflicts() {
   log "PATH resolution for 'codex':"
-  command -v codex >/dev/null 2>&1 && command -v codex || true
+  if command -v codex >/dev/null 2>&1; then
+    command -v codex
+  fi
   if command -v which >/dev/null 2>&1; then which -a codex || true; fi
 }
 

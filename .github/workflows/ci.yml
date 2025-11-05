@@ -21,11 +21,9 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y shellcheck shfmt
 
-      # Write formatting to workspace so check passes
       - name: Format (shfmt write)
         run: shfmt -w -i 2 -ci codex codex-updater
 
-      # Auto-commit formatter changes on PRs
       - name: Auto-commit formatting on PRs
         if: github.event_name == 'pull_request'
         uses: stefanzweifel/git-auto-commit-action@v5
@@ -35,7 +33,6 @@ jobs:
           commit_user_email: "github-actions[bot]@users.noreply.github.com"
           add_options: "-A"
 
-      # On pushes, enforce no uncommitted changes remain
       - name: Verify no uncommitted changes (push)
         if: github.event_name != 'pull_request'
         run: git diff --exit-code
