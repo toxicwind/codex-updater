@@ -1,11 +1,9 @@
 name: CI
-
 on:
   push:
     branches: ["**"]
   pull_request:
     branches: ["**"]
-
 jobs:
   lint-and-check:
     name: Lint and Check
@@ -13,24 +11,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Install tools
         run: |
           sudo apt-get update -y
           sudo apt-get install -y shellcheck shfmt
-
-      - name: Format (shfmt)
+      - name: Format (shfmt check)
         run: shfmt -d -i 2 -ci codex codex-updater
-
       - name: Lint (shellcheck)
         run: shellcheck -S style codex codex-updater
-
       - name: Basic dry run (help/version)
         run: |
           chmod +x codex-updater codex || true
           ./codex-updater --help || true
           ./codex --wrapper-help || true
-
       - name: Upload wrapper logs if present
         uses: actions/upload-artifact@v4
         with:

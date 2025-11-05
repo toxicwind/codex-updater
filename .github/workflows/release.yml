@@ -1,11 +1,9 @@
 name: Release
-
 on:
   push:
     tags:
       - "v*.*.*"
       - "rust-v*.*.*"
-
 jobs:
   build-release:
     name: Build and Publish
@@ -17,49 +15,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Make scripts executable
         run: chmod +x codex codex-updater || true
-
       - name: Build Codex via updater
         run: |
           set -euo pipefail
           mkdir -p "$HOME"
           ./codex-updater --prefix "$HOME/.local" --no-sudo
-
       - name: Make archives
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME}"
           mkdir -p dist
-
-          # Wrapper + updater from this repo
           cp codex codex-updater dist/
-
-          # Built binary, if present
           if [ -x "$HOME/.local/bin/codex" ]; then
             cp "$HOME/.local/bin/codex" "dist/codex-linux-amd64"
           fi
-
-          # Metadata, if present
           if [ -f "$HOME/.local/share/codex-wrapper/build-info" ]; then
             cp "$HOME/.local/share/codex-wrapper/build-info" dist/
           fi
-
-          # Docs
           for f in README.md LICENSE CHANGELOG.md; do
             [ -f "$f" ] && cp "$f" dist/
           done
-
           tar -czf "dist/codex-updater-${VERSION}-linux-amd64.tar.gz" -C dist .
           ( cd dist && zip -9 "codex-updater-${VERSION}-linux-amd64.zip" ./* )
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-artifacts
           path: dist/*
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
