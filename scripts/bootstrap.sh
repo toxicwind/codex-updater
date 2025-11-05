@@ -23,6 +23,10 @@ codex --wrapper-update || {
 
 echo
 echo "Add to your shell rc if not present:"
+# shellcheck disable=SC2016
 echo '  export PATH="$HOME/.local/bin-core:$PATH"'
+echo
+echo "Enable repo hooks (once per clone):"
+echo '  git config core.hooksPath .githooks'
 echo
 echo "Bootstrap complete. You can now run: codex <args>"

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Git pre-commit hook for codex-updater: ensure shell sources are formatted and linted.
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PACKAGER="$REPO_ROOT/scripts/packager.sh"
+
+if [[ ! -x "$PACKAGER" ]]; then
+  echo "[pre-commit] Missing packager script at $PACKAGER" >&2
+  exit 1
+fi
+
+echo "[pre-commit] Formatting shell sources via packager fmt"
+"$PACKAGER" fmt
+
+if ! git diff --quiet --exit-code; then
+  echo "[pre-commit] Formatting updated files. Please stage the changes and re-run git commit." >&2
+  exit 1
+fi
+
+echo "[pre-commit] Linting shell sources via packager lint"
+"$PACKAGER" lint
+
+echo "[pre-commit] OK"

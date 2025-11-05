@@ -1,3 +1,15 @@
 # cache directory used by the wrapper
 local-build/
-codex-updater.bak*
+codex-updater.bak*/
+
+# patch queues
+patches/local/
+patches/workdir/
+patches/*.rej
+patches/*.orig
+
+# codex-updater bootstrap
+vendor/codex/
+.home/
+dist/
+.DS_Store

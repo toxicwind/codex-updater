@@ -22,7 +22,7 @@ jobs:
           sudo apt-get install -y shellcheck shfmt
 
       - name: Format (shfmt write)
-        run: shfmt -w -i 2 -ci codex codex-updater
+        run: ./scripts/packager.sh fmt
 
       - name: Auto-commit formatting on PRs
         if: github.event_name == 'pull_request'
@@ -38,7 +38,7 @@ jobs:
         run: git diff --exit-code
 
       - name: Lint (shellcheck)
-        run: shellcheck -S style codex codex-updater
+        run: ./scripts/packager.sh lint
 
       - name: Basic dry run (help/version)
         run: |

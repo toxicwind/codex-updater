@@ -10,20 +10,32 @@ Make the OpenAI Codex CLI your own without playing tag with upstream releases.
 
 </div>
 
-Codex Updater is a cross‑distro toolkit that builds Codex from source, with a small wrapper that adds auto‑update, logging, and commit‑aware caching so you only rebuild when upstream actually changes.
+**Codex Updater** is a cross-distro toolkit that vendors the upstream **OpenAI Codex** repo, applies community/private patches, builds a versioned CLI, and installs it to a user prefix. It ships a wrapper that adds auto-updates, logging, and commit-aware caching so you only rebuild when upstream actually changes.
+
+## What’s new (patching model)
+
+- **Vendored upstream** at `vendor/codex` (git submodule)
+- **Community patches** at `patches/community` (git submodule → [`toxicwind/codex-patches`](https://github.com/toxicwind/codex-patches))
+- **Local patches** at `patches/local` (ignored; your private queue)
+- **Idempotent scripts** to apply, create, and promote patches:
+  - `scripts/patch-apply.sh` — apply community + local (auto-detects CLI root, remaps paths)
+  - `scripts/patch-new.sh "subject"` — capture staged changes into `patches/local/000N-*.patch`
+  - `scripts/patch-export.sh <local-patch>` — promote to `patches/community` and push
 
 ## Features
 
-- Commit‑aware caching to avoid redundant rebuilds.  
-- Tag‑aligned versions so `codex --version` matches the latest tag.  
-- Cross‑distro bootstrap for apt, dnf/dnf5/yum, pacman, zypper, apk, and Linuxbrew.  
-- Wrapper UX with on‑demand updates, metadata, and interval auto‑updates.  
+- Commit-aware caching: rebuilds only when upstream or patches change  
+- Tag-aligned versions: `codex --version` matches Git tags and build metadata  
+- Cross-distro bootstrap (apt, dnf/dnf5/yum, pacman, zypper, apk, Linuxbrew)  
+- Wrapper UX: on-demand updates, background auto-update, and logs with build info  
+- **Multi-OS CI**: patch + build + smoke tests on Linux and macOS across Node LTSes  
 
 ## Requirements
 
-- Linux or WSL with a supported package manager.  
-- Rust toolchain (installed automatically via rustup if missing).  
-- OpenSSL development headers (installed automatically where possible).  
+- Linux or WSL; macOS supported via CI and local builds  
+- Rust toolchain (installed automatically via `rustup` if missing)  
+- OpenSSL dev headers (installed when possible)  
+- Node.js (for upstream CLI build; CI tests Node 18/20/22)  
 
 ## Install
 
@@ -38,35 +50,138 @@ codex --wrapper-version
 
 ## Configuration
 
-Wrapper env:  
-- CODEX_UPDATER: override updater path (default: ~/.local/bin-core/codex-updater).  
-- CODEX_BIN: override installed binary (default: ~/.local/bin/codex).  
-- CODEX_WRAPPER_AUTO_UPDATE=1: enable background auto‑update.  
-- CODEX_WRAPPER_AUTO_INTERVAL: seconds between auto‑update checks (default: 86400).  
+Wrapper env:
 
-Updater flags:  
-- --prefix DIR, --branch NAME, --repo URL, --no-sudo, --force-rebuild, --cc/--cxx.  
+* `CODEX_UPDATER` — override updater path (default: `~/.local/bin-core/codex-updater`)
+* `CODEX_BIN` — override installed binary (default: `~/.local/bin/codex`)
+* `CODEX_WRAPPER_AUTO_UPDATE=1` — enable interval auto-update
+* `CODEX_WRAPPER_AUTO_INTERVAL` — seconds between checks (default: `86400`)
 
-## Cross‑distro notes
+Updater flags:
 
-- Debian/Ubuntu: build-essential, pkg-config, libssl-dev.  
-- Fedora/RHEL/CentOS/Alma/Rocky: Development Tools, pkgconf, openssl-devel.  
-- Arch/Manjaro: base-devel, pkgconf, openssl.  
-- openSUSE: pattern devel_basis, libopenssl-devel.  
-- Alpine: build-base, pkgconfig, openssl-dev.  
-- WSL: detected via kernel markers; certificates refreshed when available.  
+* `--prefix DIR`, `--branch NAME`, `--repo URL`, `--no-sudo`, `--force-rebuild`, `--cc/--cxx`
+
+## Repo layout
+
+```
+.
+├─ codex                 # lightweight wrapper (delegates, updates, logs)
+├─ codex-updater         # builder/installer for upstream codex
+├─ vendor/
+│  └─ codex              # upstream submodule (openai/codex)
+├─ patches/
+│  ├─ community          # submodule → toxicwind/codex-patches
+│  └─ local              # your private patches (gitignored)
+└─ scripts/
+   ├─ patch-apply.sh     # apply community + local patches
+   ├─ patch-new.sh       # create a new local patch from staged changes
+   ├─ patch-export.sh    # promote local → community and push
+   └─ codex-build.sh     # build & smoke-test the CLI
+```
+
+## Typical workflow
+
+```bash
+# 0) Make sure submodules are present
+git submodule update --init --recursive
+
+# 1) Apply patches (community + local) onto upstream
+./scripts/patch-apply.sh
+
+# 2) Build upstream CLI and run quick smoke tests
+./scripts/codex-build.sh
+
+# 3) Make a change inside vendor/codex (CLI)
+( cd vendor/codex && $EDITOR codex-cli/src/sessions.ts && git add -A )
+
+# 4) Capture your change as a patch
+./scripts/patch-new.sh "feat(cli/sessions): add --json and --limit flags"
+
+# 5) Test the patch again from a clean state
+git -C vendor/codex reset --hard HEAD~1
+./scripts/patch-apply.sh && ./scripts/codex-build.sh
+
+# 6) Promote your patch to the public community repo
+./scripts/patch-export.sh patches/local/0001-feat-cli-sessions-add-json-and-limit.patch
+```
+
+## Packager CLI
+
+`scripts/packager.sh` wraps the common chores so you don't need a Makefile:
+
+```bash
+# format in place (shfmt -w -i 2 -ci)
+./scripts/packager.sh fmt
+
+# lint with shellcheck -S style
+./scripts/packager.sh lint
+
+# run both (writes formatting first)
+./scripts/packager.sh check
+```
+
+## Git hooks
+
+Enable the bundled hook path once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The `pre-commit` hook runs `packager fmt` (writes) followed by `packager lint`.  
+If formatting makes changes, the commit aborts so you can stage the updated files.
+
+## CI
+
+The CI builds on Linux and macOS, across Node 18/20/22, and uploads built `dist/` artifacts for inspection.
+
+```yaml
+# .github/workflows/patch-check.yml
+name: Patch & Build Codex
+on:
+  push: { branches: ["**"] }
+  pull_request: { branches: ["**"] }
+jobs:
+  patch-and-build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: actions/setup-node@v4
+        with: { node-version: ${{ matrix.node }} }
+      - name: Apply patches
+        run: ./scripts/patch-apply.sh
+      - name: Build & smoke-test
+        run: ./scripts/codex-build.sh
+      - name: Upload dist
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-dist-${{ matrix.os }}-node${{ matrix.node }}
+          path: vendor/codex/**/dist
+          if-no-files-found: ignore
+```
 
 ## How it works
 
-- Updater syncs, versions, builds release, caches by commit, and installs to prefix.  
-- Wrapper runs updates on demand or at intervals, records metadata, and delegates.  
+1. **Updater** detects the current upstream commit + patchset hash and builds only when that **tuple changes**.
+2. **Patches** are applied with `git am` in order: community → local.
+3. **Build** uses the upstream package manager (`pnpm` or `npm`); **wrapper** registers build metadata.
+4. **Wrapper** can trigger on-demand update or run on an interval (opt-in env var).
 
 ## Development
 
-- make check runs shfmt and shellcheck.  
-- Keep scripts portable and avoid distro‑specific assumptions.  
+* `./scripts/packager.sh check` runs `shfmt` (writes) then `shellcheck`
+* `./scripts/packager.sh fmt-check` shows diffs without rewriting
+* Keep scripts POSIX-friendly; avoid hard distro assumptions
+* Patches should be targeted, reviewable, and rebased as needed
 
 ## Security & License
 
-- See SECURITY.md for private reporting.  
-- WTFPL v2 (LICENSE).  
+* Private reporting: see `SECURITY.md`
+* License: WTFPL v2 (see `LICENSE`)
