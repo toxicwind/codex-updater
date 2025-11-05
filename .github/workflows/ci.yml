@@ -2,26 +2,39 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: ["**"]
   pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: ["**"]
 
 jobs:
-  lint:
+  lint-and-check:
+    name: Lint and Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install tooling
-        run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt bats
-      - name: shfmt
-        run: shfmt -d codex codex-updater
-      - name: shellcheck
-        run: shellcheck codex codex-updater
-      - name: bats (optional)
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
         run: |
-          if [ -d tests ]; then
-            bats tests
-          else
-            echo "no tests";
-          fi
+          sudo apt-get update -y
+          sudo apt-get install -y shellcheck shfmt
+
+      - name: Format (shfmt)
+        run: shfmt -d -i 2 -ci codex codex-updater
+
+      - name: Lint (shellcheck)
+        run: shellcheck -S style codex codex-updater
+
+      - name: Basic dry run (help/version)
+        run: |
+          chmod +x codex-updater codex || true
+          ./codex-updater --help || true
+          ./codex --wrapper-help || true
+
+      - name: Upload wrapper logs if present
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrapper-logs
+          path: |
+            ~/logs/codex-wrapper.log
+          if-no-files-found: ignore

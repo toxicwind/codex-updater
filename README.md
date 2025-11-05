@@ -2,94 +2,71 @@
 
 # Codex Updater ♻️
 
-**Make the OpenAI Codex CLI your own without playing tag with upstream releases.**
+Make the OpenAI Codex CLI your own without playing tag with upstream releases.
 
-[![License: WTFPL](https://img.shields.io/badge/license-WTFPL-magenta.svg)](LICENSE)
-[![CI](https://github.com/toxicwind/codex-updater/actions/workflows/ci.yml/badge.svg)](https://github.com/toxicwind/codex-updater/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/toxicwind/codex-updater?label=latest)](https://github.com/toxicwind/codex-updater/releases/latest)
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-WTFPL-magenta.svg" alt="License"></a>
+<a href="https://github.com/toxicwind/codex-updater/actions/workflows/ci.yml"><img src="https://github.com/toxicwind/codex-updater/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://github.com/toxicwind/codex-updater/releases/latest"><img src="https://img.shields.io/github/v/release/toxicwind/codex-updater?label=latest" alt="Release"></a>
 
 </div>
 
-Out of the box, the Codex CLI ships as a monolithic binary—you pull the “latest”
-release, drop it on PATH, and hope it was built the way you need. Tweaking the build
-is painful: you burn time cloning repositories, wiring toolchains, and trying to
-remember which commit you compiled last week.
+Codex Updater is a cross‑distro toolkit that builds Codex from source, with a small wrapper that adds auto‑update, logging, and commit‑aware caching so you only rebuild when upstream actually changes.
 
-**Codex Updater fixes that.** It is a self-contained toolkit that clones upstream,
-tracks commits, injects the latest release tags, and installs a wrapper so you can
-launch Codex like normal—while still owning the build pipeline.
+## Features
 
-## ✨ What you get
+- Commit‑aware caching to avoid redundant rebuilds.  
+- Tag‑aligned versions so `codex --version` matches the latest tag.  
+- Cross‑distro bootstrap for apt, dnf/dnf5/yum, pacman, zypper, apk, and Linuxbrew.  
+- Wrapper UX with on‑demand updates, metadata, and interval auto‑updates.  
 
-- **Commit-aware builds** – caches binaries per commit hash and skips rebuilds when upstream hasn’t moved.
-- **Tag-aligned versions** – rewrites the workspace `Cargo.toml` to match the newest `rust-v*` tag so `codex --version` reflects reality.
-- **First-on-PATH wrapper** – a drop-in `codex` shim with auto-update toggles, metadata output, and friendly logging.
-- **Audit trail** – everything logs to `~/logs/codex-wrapper.log` and stores metadata in `~/.local/share/codex-wrapper/`.
+## Requirements
 
-## 📦 Repository layout
+- Linux or WSL with a supported package manager.  
+- Rust toolchain (installed automatically via rustup if missing).  
+- OpenSSL development headers (installed automatically where possible).  
 
-```
-README.md          # this doc
-codex-updater      # build + install script
-codex              # wrapper shim (place before the real binary on PATH)
-.github/           # CI and release workflows
-```
-
-## 🚀 Quickstart
+## Install
 
 ```bash
-git clone https://github.com/toxicwind/codex-updater.git
-cd codex-updater
-
-# Install into your helper bin
 chmod +x codex codex-updater
 mkdir -p ~/.local/bin-core
 cp codex codex-updater ~/.local/bin-core/
 
-# Build Codex locally (runs if binary missing or commit changed)
 codex --wrapper-update
-
-# Inspect build metadata
 codex --wrapper-version
 ```
 
-Prefer prebuilt artifacts? Download the tarball from the
-[latest release](https://github.com/toxicwind/codex-updater/releases/latest) — it ships an LTO-optimized Linux amd64 Codex binary plus both scripts.
+## Configuration
 
-## 🛠 Wrapper flags & env knobs
+Wrapper env:  
+- CODEX_UPDATER: override updater path (default: ~/.local/bin-core/codex-updater).  
+- CODEX_BIN: override installed binary (default: ~/.local/bin/codex).  
+- CODEX_WRAPPER_AUTO_UPDATE=1: enable background auto‑update.  
+- CODEX_WRAPPER_AUTO_INTERVAL: seconds between auto‑update checks (default: 86400).  
 
-| Flag | Description |
-| --- | --- |
-| `--wrapper-update` | Run the updater before launching `codex`. |
-| `--wrapper-rebuild` | Force `cargo clean` + rebuild even if commit cached. |
-| `--wrapper-no-update` | Skip auto-update for this invocation. |
-| `--wrapper-version` | Print cached commit/version metadata and exit. |
-| `--wrapper-print-target` | Show the delegated binary path. |
+Updater flags:  
+- --prefix DIR, --branch NAME, --repo URL, --no-sudo, --force-rebuild, --cc/--cxx.  
 
-| Environment variable | Purpose | Default |
-| --- | --- | --- |
-| `CODEX_WRAPPER_AUTO_UPDATE` | Enable background auto-update checks | `0` |
-| `CODEX_WRAPPER_AUTO_INTERVAL` | Seconds between auto-update checks | `86400` |
-| `CODEX_UPDATER` | Override updater script path | `~/.local/bin-core/codex-updater` |
-| `CODEX_BIN` | Override installed binary path | `~/.local/bin/codex` |
+## Cross‑distro notes
 
-## 🧪 Automation
+- Debian/Ubuntu: build-essential, pkg-config, libssl-dev.  
+- Fedora/RHEL/CentOS/Alma/Rocky: Development Tools, pkgconf, openssl-devel.  
+- Arch/Manjaro: base-devel, pkgconf, openssl.  
+- openSUSE: pattern devel_basis, libopenssl-devel.  
+- Alpine: build-base, pkgconfig, openssl-dev.  
+- WSL: detected via kernel markers; certificates refreshed when available.  
 
-- **CI** (`ci.yml`): shfmt + shellcheck (+ bats if you add tests).
-- **Release** (`release.yml`): archives `HEAD` and updates the `latest` tag with
-  a fresh `codex-updater.tar.gz` artifact on every push to `main`.
+## How it works
 
-## 🤝 Contributing
+- Updater syncs, versions, builds release, caches by commit, and installs to prefix.  
+- Wrapper runs updates on demand or at intervals, records metadata, and delegates.  
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). PRs, issues, and discussions are open.
-Run `make check` before submitting.
+## Development
 
-## 🔐 Security
+- make check runs shfmt and shellcheck.  
+- Keep scripts portable and avoid distro‑specific assumptions.  
 
-Report vulnerabilities privately via the GitHub security advisory flow or
-security@hypebrut.sh.
+## Security & License
 
-## 📜 License
-
-Released under the [Do What The Fuck You Want To Public License](LICENSE).
-It’s your build chain—bend it however you like.
+- See SECURITY.md for private reporting.  
+- WTFPL v2 (LICENSE).  

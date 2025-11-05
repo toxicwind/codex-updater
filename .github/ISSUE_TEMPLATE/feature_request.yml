@@ -1,25 +1,17 @@
 name: Feature request
-description: Suggest an improvement for codex-updater or the wrapper shim.
-title: "feat: "
-labels:
-  - enhancement
+description: Suggest an idea to improve Codex Updater
+labels: [enhancement]
 body:
   - type: textarea
     id: motivation
     attributes:
       label: Motivation
-      description: What problem does this solve?
+      description: What problem would this feature solve?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
-      description: Include command samples or logging ideas.
-    validations:
-      required: true
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives
-      description: Any workarounds today?
+      label: Proposal
+      description: How should it work?
+      placeholder: Describe expected UX and flags/config if any

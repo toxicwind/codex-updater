@@ -1,9 +1,7 @@
 ## Summary
-Explain what changed and why it matters.
-
-## Testing
-List commands run (`make check`, manual smoke tests, etc.).
+Explain what this change does and why.
 
 ## Checklist
-- [ ] I ran `make check`
-- [ ] I updated docs if needed
+- [ ] `make check` passes locally (shfmt + shellcheck).
+- [ ] Docs updated (README or comments).
+- [ ] Cross‑distro logic tested on at least one Debian‑family and one RHEL‑family system (or WSL).
