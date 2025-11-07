@@ -60,7 +60,7 @@ Wrapper env:
 * `CODEX_WRAPPER_AUTO_INTERVAL` — seconds between checks (default: `86400`)
 * `CODEX_WRAPPER_ALWAYS_UPDATE` — force the updater before every launch (default `0`, set `1` to opt in)
 * `CODEX_WRAPPER_ALLOW_SUDO=1` — opt back into package-manager installs (wrapper defaults to `--no-sudo`)
-* `CODEX_WORKSPACE` — path to a local `codex-updater` checkout to mirror (auto-detects `~/development/codex-updater`)
+* `CODEX_WORKSPACE` — absolute path to a local `codex-updater` checkout you want mirrored (leave unset to clone from GitHub on demand)
 * `CODEX_WORKSPACE_SYNC=1` — git fetch + `scripts/patch-apply.sh` on that workspace before building (default `0`)
 
 Updater flags:
