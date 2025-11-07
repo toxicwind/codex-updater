@@ -74,6 +74,16 @@ Updater flags:
 
 Related env knobs mirror the flags: `CODEX_OPT_PRESET`, `CODEX_TARGET_CPU`, `CODEX_USE_SCCACHE`, `CODEX_EXTRA_RUSTFLAGS`, `CODEX_CARGO_JOBS`, `CODEX_WORKSPACE`, `CODEX_WORKSPACE_SYNC`, and `CODEX_SKIP_BUILD_DEPS`.
 
+### Environment files
+
+Both executables auto-load the first readable `.env` they can find in this order:
+
+1. Path supplied via `CODEX_ENV_FILE`
+2. `$HOME/.config/codex-updater/.env`
+3. An `.env` that lives next to the script/binary (inside this repo before install)
+
+The repo ships `.env.example`; copy it to `.env`, tweak the keys you care about, and the wrappers pick them up automatically—no more random `export …` lines in your shell profile.
+
 ## Repo layout
 
 ```

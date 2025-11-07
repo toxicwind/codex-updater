@@ -3,6 +3,28 @@
 
 set -euo pipefail
 
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd -- "$(dirname "${SCRIPT_SOURCE}")" && pwd)"
+
+load_env_file() {
+  local candidate=""
+  if [[ -n ${CODEX_ENV_FILE:-} && -r ${CODEX_ENV_FILE} ]]; then
+    candidate="${CODEX_ENV_FILE}"
+  elif [[ -r "$HOME/.config/codex-updater/.env" ]]; then
+    candidate="$HOME/.config/codex-updater/.env"
+  elif [[ -r "$SCRIPT_DIR/.env" ]]; then
+    candidate="$SCRIPT_DIR/.env"
+  fi
+  if [[ -n $candidate ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$candidate"
+    set +a
+  fi
+}
+
+load_env_file
+
 # Defaults
 REPO_URL_DEFAULT="https://github.com/openai/codex.git"
 BRANCH_DEFAULT="main"

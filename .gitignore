@@ -13,3 +13,4 @@ vendor/codex/
 .home/
 dist/
 .DS_Store
+.env
