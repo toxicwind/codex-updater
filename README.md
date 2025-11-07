@@ -48,7 +48,7 @@ codex --wrapper-update
 codex --wrapper-version
 ```
 
-> **Note:** The wrapper aliases `codex` → `codex-updater` and, by default, runs the updater before *every* CLI launch. Export `CODEX_WRAPPER_ALWAYS_UPDATE=0` if you intentionally need to skip that pre-flight rebuild.
+> **Note:** The wrapper aliases `codex` → `codex-updater`. It performs a background auto-update based on the 24 h interval, but it no longer forces a rebuild on every single invocation. Export `CODEX_WRAPPER_ALWAYS_UPDATE=1` if you want a pre-flight rebuild before each launch.
 
 ## Configuration
 
@@ -58,7 +58,7 @@ Wrapper env:
 * `CODEX_BIN` — override installed binary (default: `~/.local/bin/codex`)
 * `CODEX_WRAPPER_AUTO_UPDATE=0` — disable the 24 h background auto-update (default is on)
 * `CODEX_WRAPPER_AUTO_INTERVAL` — seconds between checks (default: `86400`)
-* `CODEX_WRAPPER_ALWAYS_UPDATE` — run the updater before every launch (default `1`, set `0` to opt out)
+* `CODEX_WRAPPER_ALWAYS_UPDATE` — force the updater before every launch (default `0`, set `1` to opt in)
 * `CODEX_WRAPPER_ALLOW_SUDO=1` — opt back into package-manager installs (wrapper defaults to `--no-sudo`)
 * `CODEX_WORKSPACE` — path to a local `codex-updater` checkout to mirror (auto-detects `~/development/codex-updater`)
 * `CODEX_WORKSPACE_SYNC=1` — git fetch + `scripts/patch-apply.sh` on that workspace before building (default `0`)
