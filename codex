@@ -29,7 +29,7 @@ log_err() {
 
 log_event() {
   mkdir -p "$LOG_DIR"
-  printf '%s | %s\n' "$(date "$TIMESTAMP_FORMAT")" "$*" >>"$LOG_FILE"
+  printf '%s | %s\n' "$(date +"$TIMESTAMP_FORMAT")" "$*" >>"$LOG_FILE"
 }
 
 usage() {

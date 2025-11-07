@@ -60,6 +60,11 @@ Wrapper env:
 Updater flags:
 
 * `--prefix DIR`, `--branch NAME`, `--repo URL`, `--no-sudo`, `--force-rebuild`, `--cc/--cxx`
+* `--opt-preset portable|balanced|native` — portable keeps upstream defaults, balanced enables ThinLTO/codegen-units 4 (default), native adds `-C target-cpu=native` + panic=abort
+* `--cpu-target <rustc-target>` — force a specific `-C target-cpu` (overrides preset)
+* `--sccache-mode on|off|auto` — pick how aggressively to use `sccache` as the `RUSTC_WRAPPER`
+
+Related env knobs mirror the flags: `CODEX_OPT_PRESET`, `CODEX_TARGET_CPU`, `CODEX_USE_SCCACHE`, `CODEX_EXTRA_RUSTFLAGS`, and `CODEX_CARGO_JOBS`.
 
 ## Repo layout
 

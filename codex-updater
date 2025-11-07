@@ -13,6 +13,11 @@ NO_SUDO=0
 FORCE_REBUILD=0
 CC_OVERRIDE=""
 CXX_OVERRIDE=""
+OPT_PRESET="${CODEX_OPT_PRESET:-balanced}"
+TARGET_CPU_OVERRIDE="${CODEX_TARGET_CPU:-}"
+USE_SCCACHE="${CODEX_USE_SCCACHE:-auto}"
+EXTRA_RUSTFLAGS="${CODEX_EXTRA_RUSTFLAGS:-}"
+CARGO_JOBS="${CODEX_CARGO_JOBS:-}"
 
 # Logging
 log() { printf "\033[1;34m[codex]\033[0m %s\n" "$*"; }
@@ -54,13 +59,33 @@ while [[ $# -gt 0 ]]; do
       CXX_OVERRIDE="$2"
       shift 2
       ;;
+    --opt-preset)
+      OPT_PRESET="$2"
+      shift 2
+      ;;
+    --cpu-target)
+      TARGET_CPU_OVERRIDE="$2"
+      shift 2
+      ;;
+    --sccache-mode)
+      USE_SCCACHE="$2"
+      shift 2
+      ;;
     -h | --help)
       cat <<'USAGE'
 codex-updater [--prefix DIR] [--branch NAME] [--repo URL]
               [--no-sudo] [--force-rebuild] [--cc CC] [--cxx CXX]
+              [--opt-preset portable|balanced|native]
+              [--cpu-target <rustc-target>] [--sccache-mode on|off|auto]
 
 Installs build deps, fetches/upgrades Codex sources, builds in release,
 caches artifacts by commit, and installs the binary into <prefix>/bin.
+Environment overrides:
+  CODEX_OPT_PRESET        same as --opt-preset (default: balanced)
+  CODEX_TARGET_CPU        target cpu passed to -C target-cpu
+  CODEX_USE_SCCACHE       on|off|auto (default: auto)
+  CODEX_EXTRA_RUSTFLAGS   appended to RUSTFLAGS
+  CODEX_CARGO_JOBS        passed to CARGO_BUILD_JOBS
 USAGE
       exit 0
       ;;
@@ -176,6 +201,95 @@ ensure_paths() {
   esac
 }
 
+set_profile_var_default() {
+  local key="$1"
+  local value="$2"
+  local var="CARGO_PROFILE_RELEASE_${key}"
+  local current="${!var:-}"
+  if [[ -z "$current" ]]; then
+    export "$var=$value"
+    log "Profile override: release.${key,,}=$value"
+  else
+    log "Profile override preserved: release.${key,,}=$current"
+  fi
+}
+
+append_rustflags() {
+  local addition="$1"
+  [[ -z "$addition" ]] && return 0
+  if [[ -z "${RUSTFLAGS:-}" ]]; then
+    export RUSTFLAGS="$addition"
+  else
+    export RUSTFLAGS="$RUSTFLAGS $addition"
+  fi
+}
+
+configure_opt_flags() {
+  local preset="${OPT_PRESET,,}"
+  case "$preset" in
+    portable)
+      set_profile_var_default LTO false
+      set_profile_var_default CODEGEN_UNITS 16
+      set_profile_var_default STRIP symbols
+      set_profile_var_default PANIC unwind
+      ;;
+    balanced | "")
+      set_profile_var_default LTO thin
+      set_profile_var_default CODEGEN_UNITS 4
+      set_profile_var_default STRIP symbols
+      set_profile_var_default PANIC unwind
+      ;;
+    native)
+      local cpu="${TARGET_CPU_OVERRIDE:-native}"
+      set_profile_var_default LTO thin
+      set_profile_var_default CODEGEN_UNITS 2
+      set_profile_var_default STRIP symbols
+      set_profile_var_default PANIC abort
+      append_rustflags "-C target-cpu=$cpu"
+      ;;
+    *)
+      warn "Unknown optimization preset '$OPT_PRESET'; skipping profile tweaks."
+      ;;
+  esac
+
+  if [[ -n "$TARGET_CPU_OVERRIDE" && "$preset" != native ]]; then
+    append_rustflags "-C target-cpu=$TARGET_CPU_OVERRIDE"
+  fi
+
+  append_rustflags "$EXTRA_RUSTFLAGS"
+
+  if [[ -n "$CARGO_JOBS" ]]; then
+    export CARGO_BUILD_JOBS="$CARGO_JOBS"
+    log "CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS"
+  fi
+}
+
+configure_sccache() {
+  local mode="${USE_SCCACHE,,}"
+  case "$mode" in
+    on | auto | "")
+      if need_cmd sccache; then
+        export RUSTC_WRAPPER="sccache"
+        export SCCACHE_IDLE_TIMEOUT="${SCCACHE_IDLE_TIMEOUT:-1200}"
+        log "Using sccache wrapper (mode=${mode:-auto})"
+      elif [[ "$mode" == "on" ]]; then
+        warn "CODEX_USE_SCCACHE=on but sccache not found on PATH."
+      else
+        log "sccache not found; continuing without compiler cache."
+      fi
+      ;;
+    off) ;;
+    *)
+      warn "Unknown sccache mode '$USE_SCCACHE'; skipping."
+      ;;
+  esac
+}
+
+configure_build_tweaks() {
+  configure_sccache
+  configure_opt_flags
+}
+
 ensure_state_dirs() {
   mkdir -p "$STATE_DIR" "$DIST_DIR"
 }
@@ -252,11 +366,22 @@ compute_build_version() {
 }
 
 set_workspace_version() {
-  local new_version=""
-  local cargo_file="/Cargo.toml"
+  local workspace_root="${1:-}"
+  local new_version="${2:-}"
+  local cargo_file
+
+  if [[ -z "$workspace_root" ]]; then
+    err "Workspace root missing when setting version."
+    return 1
+  fi
+  cargo_file="$workspace_root/Cargo.toml"
   if [[ ! -f "$cargo_file" ]]; then
     err "Cargo workspace manifest not found at $cargo_file"
     return 1
+  fi
+  if [[ -z "$new_version" ]]; then
+    warn "Workspace version not provided; defaulting to 0.0.0"
+    new_version="0.0.0"
   fi
   NEW_VERSION="$new_version" python3 - "$cargo_file" <<'PY'
 import os, sys
@@ -405,6 +530,7 @@ main() {
   install_build_deps
   ensure_rust
   ensure_paths
+  configure_build_tweaks
   resolve_cc_cxx
   fetch_repo
   build_and_install
