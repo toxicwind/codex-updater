@@ -4,6 +4,14 @@ set -euo pipefail
 
 UPDATER_DEFAULT="$HOME/.local/bin-core/codex-updater"
 REAL_BIN_DEFAULT="$HOME/.local/bin/codex"
+DEV_WORKSPACE_CANDIDATE="$HOME/development/codex-updater"
+DEV_WORKSPACE=""
+if [[ -d "$DEV_WORKSPACE_CANDIDATE/vendor/codex" ]]; then
+  DEV_WORKSPACE="$DEV_WORKSPACE_CANDIDATE"
+fi
+if [[ -x "$DEV_WORKSPACE_CANDIDATE/codex-updater" ]]; then
+  UPDATER_DEFAULT="$DEV_WORKSPACE_CANDIDATE/codex-updater"
+fi
 STATE_DIR="$HOME/.local/share/codex-wrapper"
 STAMP_FILE="$STATE_DIR/last-update"
 LOG_DIR="$HOME/logs"
@@ -15,7 +23,19 @@ TIMESTAMP_FORMAT="%Y-%m-%dT%H:%M:%S%z"
 UPDATER="${CODEX_UPDATER:-$UPDATER_DEFAULT}"
 REAL_BIN="${CODEX_BIN:-$REAL_BIN_DEFAULT}"
 AUTO_INTERVAL="${CODEX_WRAPPER_AUTO_INTERVAL:-86400}"
-AUTO_PREF="${CODEX_WRAPPER_AUTO_UPDATE:-0}"
+AUTO_PREF="${CODEX_WRAPPER_AUTO_UPDATE:-1}"
+ALWAYS_UPDATE_DEFAULT_RAW="${CODEX_WRAPPER_ALWAYS_UPDATE:-1}"
+
+case "${ALWAYS_UPDATE_DEFAULT_RAW,,}" in
+  0 | false | off | no)
+    ALWAYS_UPDATE_DEFAULT=0
+    ;;
+  *)
+    ALWAYS_UPDATE_DEFAULT=1
+    ;;
+esac
+
+declare -a UPDATER_ENV_VARS=()
 
 BUILD_COMMIT=""
 BUILD_VERSION=""
@@ -47,8 +67,9 @@ Wrapper flags:
 Environment knobs:
   CODEX_UPDATER                 override updater path.
   CODEX_BIN                     override delegated codex binary path.
-  CODEX_WRAPPER_AUTO_UPDATE=1   enable interval-based background updates (default 24h).
+  CODEX_WRAPPER_AUTO_UPDATE=0   disable interval-based background updates (default on, 24h cadence).
   CODEX_WRAPPER_AUTO_INTERVAL   seconds between background updates (default 86400).
+  CODEX_WRAPPER_ALWAYS_UPDATE   force updater before every launch (default 1; set 0 to disable).
 USAGE
 }
 
@@ -106,14 +127,20 @@ run_updater() {
 
   mkdir -p "$STATE_DIR"
   log_event "updater start: $UPDATER $*"
-  if "$UPDATER" "$@"; then
+  if ((${#UPDATER_ENV_VARS[@]})); then
+    env "${UPDATER_ENV_VARS[@]}" "$UPDATER" "$@"
+    rc=$?
+  else
+    "$UPDATER" "$@"
+    rc=$?
+  fi
+  if [[ $rc -eq 0 ]]; then
     log_event "updater success"
     if read_build_metadata; then
       log_event "build metadata: version=${BUILD_VERSION:-unknown} commit=${BUILD_COMMIT:0:12}"
     fi
     date +%s >"$STAMP_FILE"
   else
-    rc=$?
     log_event "updater failure rc=$rc"
     return "$rc"
   fi
@@ -153,10 +180,21 @@ maybe_auto_update() {
 main() {
   mkdir -p "$STATE_DIR" "$DIST_DIR"
 
-  local run_update=0
+  local run_update=$ALWAYS_UPDATE_DEFAULT
   local skip_auto=0
   declare -a updater_args=()
   declare -a codex_args=()
+
+  UPDATER_ENV_VARS=()
+  if [[ -z ${CODEX_SKIP_BUILD_DEPS+x} ]]; then
+    UPDATER_ENV_VARS+=("CODEX_SKIP_BUILD_DEPS=1")
+  fi
+  if [[ -z ${CODEX_WORKSPACE+x} && -n ${DEV_WORKSPACE:-} ]]; then
+    UPDATER_ENV_VARS+=("CODEX_WORKSPACE=$DEV_WORKSPACE")
+    if [[ -z ${CODEX_WORKSPACE_SYNC+x} ]]; then
+      UPDATER_ENV_VARS+=("CODEX_WORKSPACE_SYNC=0")
+    fi
+  fi
 
   while (($#)); do
     case "$1" in
@@ -169,6 +207,7 @@ main() {
         ;;
       --wrapper-no-update)
         skip_auto=1
+        run_update=0
         ;;
       --wrapper-help)
         usage
@@ -199,7 +238,12 @@ main() {
     run_update=1
   fi
 
+  if [[ ${CODEX_WRAPPER_ALLOW_SUDO:-0} != 1 ]]; then
+    updater_args+=(--no-sudo)
+  fi
+
   if ((run_update)); then
+    printf '[codex-wrapper] running updater before launch (set CODEX_WRAPPER_ALWAYS_UPDATE=0 to opt out)\n' >&2
     run_updater "${updater_args[@]}"
   else
     maybe_auto_update "$skip_auto" "${updater_args[@]}"

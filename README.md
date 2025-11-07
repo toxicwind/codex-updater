@@ -25,7 +25,7 @@ Make the OpenAI Codex CLI your own without playing tag with upstream releases.
 ## Features
 
 - Commit-aware caching: rebuilds only when upstream or patches change  
-- Tag-aligned versions: `codex --version` matches Git tags and build metadata  
+- Tag-/commit-aware versions: `codex --version` surfaces Git tags when available, otherwise `<YYYY.MMDD.HHMM+sha>` so you know exactly which upstream commit is installed  
 - Cross-distro bootstrap (apt, dnf/dnf5/yum, pacman, zypper, apk, Linuxbrew)  
 - Wrapper UX: on-demand updates, background auto-update, and logs with build info  
 - **Multi-OS CI**: patch + build + smoke tests on Linux and macOS across Node LTSes  
@@ -48,14 +48,20 @@ codex --wrapper-update
 codex --wrapper-version
 ```
 
+> **Note:** The wrapper aliases `codex` → `codex-updater` and, by default, runs the updater before *every* CLI launch. Export `CODEX_WRAPPER_ALWAYS_UPDATE=0` if you intentionally need to skip that pre-flight rebuild.
+
 ## Configuration
 
 Wrapper env:
 
 * `CODEX_UPDATER` — override updater path (default: `~/.local/bin-core/codex-updater`)
 * `CODEX_BIN` — override installed binary (default: `~/.local/bin/codex`)
-* `CODEX_WRAPPER_AUTO_UPDATE=1` — enable interval auto-update
+* `CODEX_WRAPPER_AUTO_UPDATE=0` — disable the 24 h background auto-update (default is on)
 * `CODEX_WRAPPER_AUTO_INTERVAL` — seconds between checks (default: `86400`)
+* `CODEX_WRAPPER_ALWAYS_UPDATE` — run the updater before every launch (default `1`, set `0` to opt out)
+* `CODEX_WRAPPER_ALLOW_SUDO=1` — opt back into package-manager installs (wrapper defaults to `--no-sudo`)
+* `CODEX_WORKSPACE` — path to a local `codex-updater` checkout to mirror (auto-detects `~/development/codex-updater`)
+* `CODEX_WORKSPACE_SYNC=1` — git fetch + `scripts/patch-apply.sh` on that workspace before building (default `0`)
 
 Updater flags:
 
@@ -63,8 +69,10 @@ Updater flags:
 * `--opt-preset portable|balanced|native` — portable keeps upstream defaults, balanced enables ThinLTO/codegen-units 4 (default), native adds `-C target-cpu=native` + panic=abort
 * `--cpu-target <rustc-target>` — force a specific `-C target-cpu` (overrides preset)
 * `--sccache-mode on|off|auto` — pick how aggressively to use `sccache` as the `RUSTC_WRAPPER`
+* `--workspace DIR` — build from an existing checkout (mirrored into `~/.cache/codex-workspace-build`)
+* `--skip-deps` — skip dependency installation (same as `CODEX_SKIP_BUILD_DEPS=1`)
 
-Related env knobs mirror the flags: `CODEX_OPT_PRESET`, `CODEX_TARGET_CPU`, `CODEX_USE_SCCACHE`, `CODEX_EXTRA_RUSTFLAGS`, and `CODEX_CARGO_JOBS`.
+Related env knobs mirror the flags: `CODEX_OPT_PRESET`, `CODEX_TARGET_CPU`, `CODEX_USE_SCCACHE`, `CODEX_EXTRA_RUSTFLAGS`, `CODEX_CARGO_JOBS`, `CODEX_WORKSPACE`, `CODEX_WORKSPACE_SYNC`, and `CODEX_SKIP_BUILD_DEPS`.
 
 ## Repo layout
 

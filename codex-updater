@@ -71,12 +71,23 @@ while [[ $# -gt 0 ]]; do
       USE_SCCACHE="$2"
       shift 2
       ;;
+    --workspace)
+      WORKSPACE_DIR="$2"
+      SRC_BASE="$WORKSPACE_BUILD_DIR"
+      SRC_DIR="$WORKSPACE_BUILD_DIR"
+      shift 2
+      ;;
+    --skip-deps)
+      SKIP_BUILD_DEPS=1
+      shift
+      ;;
     -h | --help)
       cat <<'USAGE'
 codex-updater [--prefix DIR] [--branch NAME] [--repo URL]
               [--no-sudo] [--force-rebuild] [--cc CC] [--cxx CXX]
               [--opt-preset portable|balanced|native]
               [--cpu-target <rustc-target>] [--sccache-mode on|off|auto]
+              [--workspace DIR] [--skip-deps]
 
 Installs build deps, fetches/upgrades Codex sources, builds in release,
 caches artifacts by commit, and installs the binary into <prefix>/bin.
@@ -86,6 +97,9 @@ Environment overrides:
   CODEX_USE_SCCACHE       on|off|auto (default: auto)
   CODEX_EXTRA_RUSTFLAGS   appended to RUSTFLAGS
   CODEX_CARGO_JOBS        passed to CARGO_BUILD_JOBS
+  CODEX_WORKSPACE         path to local codex-updater checkout to build from
+  CODEX_WORKSPACE_SYNC    set to 1 to git fetch + patch-apply before building
+  CODEX_SKIP_BUILD_DEPS   set to 1 to skip package-manager dependency installs
 USAGE
       exit 0
       ;;
@@ -102,8 +116,16 @@ STATE_DIR="$HOME/.local/share/codex-wrapper"
 DIST_DIR="$STATE_DIR/dist"
 META_FILE="$STATE_DIR/build-info"
 CACHE_BASE="${XDG_CACHE_HOME:-$HOME/.cache}"
+WORKSPACE_DIR="${CODEX_WORKSPACE:-}"
+SKIP_BUILD_DEPS="${CODEX_SKIP_BUILD_DEPS:-0}"
+WORKSPACE_SYNC="${CODEX_WORKSPACE_SYNC:-0}"
+WORKSPACE_BUILD_DIR="$CACHE_BASE/codex-workspace-build"
 SRC_BASE="$CACHE_BASE/codex-src"
 SRC_DIR="$SRC_BASE/codex"
+if [[ -n "$WORKSPACE_DIR" ]]; then
+  SRC_BASE="$WORKSPACE_BUILD_DIR"
+  SRC_DIR="$WORKSPACE_BUILD_DIR"
+fi
 INSTALL_PATH="$BIN_DIR/codex"
 
 # Utils
@@ -137,6 +159,10 @@ detect_pm() {
 }
 
 install_build_deps() {
+  if [[ "$SKIP_BUILD_DEPS" == "1" ]]; then
+    log "Skipping system dependency installation (CODEX_SKIP_BUILD_DEPS=1)."
+    return 0
+  fi
   local pm
   pm="$(detect_pm)"
   log "Detected package manager: $pm"
@@ -226,10 +252,11 @@ append_rustflags() {
 
 configure_opt_flags() {
   local preset="${OPT_PRESET,,}"
+  set_profile_var_default INCREMENTAL false
   case "$preset" in
     portable)
       set_profile_var_default LTO false
-      set_profile_var_default CODEGEN_UNITS 16
+      set_profile_var_default CODEGEN_UNITS 12
       set_profile_var_default STRIP symbols
       set_profile_var_default PANIC unwind
       ;;
@@ -242,7 +269,7 @@ configure_opt_flags() {
     native)
       local cpu="${TARGET_CPU_OVERRIDE:-native}"
       set_profile_var_default LTO thin
-      set_profile_var_default CODEGEN_UNITS 2
+      set_profile_var_default CODEGEN_UNITS 1
       set_profile_var_default STRIP symbols
       set_profile_var_default PANIC abort
       append_rustflags "-C target-cpu=$cpu"
@@ -261,6 +288,10 @@ configure_opt_flags() {
   if [[ -n "$CARGO_JOBS" ]]; then
     export CARGO_BUILD_JOBS="$CARGO_JOBS"
     log "CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS"
+  fi
+
+  if [[ -n "${RUSTFLAGS:-}" ]]; then
+    log "RUSTFLAGS=$RUSTFLAGS"
   fi
 }
 
@@ -337,6 +368,72 @@ resolve_cc_cxx() {
   log "C toolchain → CC=${CC}${CXX:+ CXX=${CXX}}"
 }
 
+prepare_workspace_repo() {
+  local root="$WORKSPACE_DIR"
+  local vendor="$root/vendor/codex"
+
+  if [[ ! -d "$root" ]]; then
+    err "Workspace directory $root not found (set CODEX_WORKSPACE to a valid codex-updater checkout)."
+    exit 1
+  fi
+  if [[ ! -d "$vendor" ]]; then
+    err "Workspace missing vendor/codex (run git submodule update --init --recursive)."
+    exit 1
+  fi
+
+  if ((WORKSPACE_SYNC)); then
+    log "Syncing workspace $root (git fetch + patch apply)"
+    (cd "$root" && git fetch origin --tags --prune >/dev/null 2>&1 && git pull --rebase --autostash) ||
+      warn "Workspace git pull failed; continuing with local state."
+    git -C "$root" submodule update --init --recursive >/dev/null 2>&1 ||
+      warn "Failed to update submodules inside workspace."
+    if [[ -x "$root/scripts/patch-apply.sh" ]]; then
+      (cd "$root" && ./scripts/patch-apply.sh >/dev/null) ||
+        warn "patch-apply.sh reported an error; workspace may be inconsistent."
+    fi
+  else
+    log "Using workspace $root without auto-sync (CODEX_WORKSPACE_SYNC=0)."
+  fi
+
+  need_cmd rsync
+  mkdir -p "$WORKSPACE_BUILD_DIR"
+  log "Mirroring $vendor → $WORKSPACE_BUILD_DIR"
+  rsync -a --delete --exclude target "$vendor/" "$WORKSPACE_BUILD_DIR"/
+  local submodule_git
+  submodule_git="$(git -C "$vendor" rev-parse --git-dir 2>/dev/null || true)"
+  if [[ -n "$submodule_git" && -d "$submodule_git" ]]; then
+    rm -rf "$WORKSPACE_BUILD_DIR/.git"
+    rsync -a --delete "$submodule_git/" "$WORKSPACE_BUILD_DIR/.git/"
+    python3 - "$WORKSPACE_BUILD_DIR" <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+cfg = root / ".git" / "config"
+if not cfg.exists():
+    sys.exit(0)
+
+original = cfg.read_text()
+lines = original.splitlines()
+updated = []
+replaced = False
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith("worktree"):
+        indent = line[: len(line) - len(line.lstrip())]
+        updated.append(f"{indent}worktree = {root.as_posix()}")
+        replaced = True
+    else:
+        updated.append(line)
+if not replaced:
+    updated.append(f"\tworktree = {root.as_posix()}")
+cfg.write_text("\n".join(updated) + ("\n" if original.endswith("\n") else ""))
+PY
+    git --git-dir "$WORKSPACE_BUILD_DIR/.git" config core.worktree "$WORKSPACE_BUILD_DIR" >/dev/null 2>&1 || true
+  fi
+  SRC_DIR="$WORKSPACE_BUILD_DIR"
+}
+
 fetch_repo() {
   mkdir -p "$SRC_BASE"
   if [[ ! -d "$SRC_DIR/.git" ]]; then
@@ -346,23 +443,75 @@ fetch_repo() {
     log "Updating repository at $SRC_DIR"
     (cd "$SRC_DIR" && git fetch origin --tags --prune && git checkout "$BRANCH" && git pull --rebase --autostash)
   fi
+
+  if [[ -f "$SRC_DIR/.git/shallow" ]]; then
+    log "Repository is shallow; fetching full history for versioning"
+    (cd "$SRC_DIR" && git fetch --unshallow >/dev/null 2>&1) || true
+  fi
+
+  if ! (cd "$SRC_DIR" && git fetch origin --tags --force --prune >/dev/null 2>&1); then
+    warn "Unable to refresh git tags for $REPO_URL (version stamping may fallback to commit time)."
+  fi
 }
 
 compute_build_version() {
-  local root="$1" desc ver
-  desc="$(git -C "$root" describe --tags --match 'rust-v*' --abbrev=0 2>/dev/null || true)"
-  if [[ -n "$desc" ]]; then
-    ver="${desc#rust-v}"
-    printf '%s' "$ver"
-    return 0
+  local root="$1" head short desc base commits commit_id commit_ts fallback version dirty_sig=""
+  head="$(git -C "$root" rev-parse HEAD 2>/dev/null || true)"
+  short="${head:0:12}"
+
+  if ! git -C "$root" diff --quiet HEAD -- 2>/dev/null ||
+    ! git -C "$root" diff --quiet --cached HEAD -- 2>/dev/null; then
+    dirty_sig="$(git -C "$root" status --porcelain 2>/dev/null | sha256sum | cut -c1-8 2>/dev/null || true)"
   fi
-  desc="$(git -C "$root" describe --tags --abbrev=0 2>/dev/null || true)"
-  if [[ -n "$desc" ]]; then
-    ver="${desc#v}"
-    printf '%s' "$ver"
-    return 0
+
+  if desc="$(git -C "$root" describe --tags --match 'rust-v*' --long 2>/dev/null)" ||
+    desc="$(git -C "$root" describe --tags --long 2>/dev/null)"; then
+    if [[ "$desc" =~ ^(.+)-([0-9]+)-g([0-9a-f]+)$ ]]; then
+      base="${BASH_REMATCH[1]}"
+      commits="${BASH_REMATCH[2]}"
+      commit_id="${BASH_REMATCH[3]}"
+      base="${base#rust-v}"
+      base="${base#v}"
+      if [[ "${commits}" == "0" ]]; then
+        version="$base"
+      else
+        version="$base+${commits}.${commit_id:-$short}"
+      fi
+      if [[ -n "$dirty_sig" ]]; then
+        version="${version}.dirty${dirty_sig}"
+      fi
+      printf '%s' "$version"
+      return 0
+    fi
   fi
-  printf '%s' "0.0.0"
+
+  commit_ts="$(git -C "$root" show -s --format=%ct HEAD 2>/dev/null || true)"
+  if [[ -n "$commit_ts" ]]; then
+    fallback="$(
+      python3 - "$commit_ts" <<'PY' 2>/dev/null | tr -d '\n' || true
+import sys
+from datetime import datetime, timezone
+
+if len(sys.argv) < 2:
+    sys.exit(1)
+
+ts = float(sys.argv[1])
+dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+print(dt.strftime("%Y.%m%d.%H%M"))
+PY
+    )"
+  fi
+
+  if [[ -z "$fallback" ]]; then
+    fallback="0.0.0"
+  fi
+  if [[ -n "$short" ]]; then
+    fallback="${fallback}+${short}"
+  fi
+  if [[ -n "$dirty_sig" ]]; then
+    fallback="${fallback}.dirty${dirty_sig}"
+  fi
+  printf '%s' "$fallback"
 }
 
 set_workspace_version() {
@@ -413,7 +562,8 @@ PY
 
 dist_path_for_commit() {
   local commit="$1"
-  printf '%s' "$DIST_DIR/codex-$commit"
+  local safe="${commit//[^A-Za-z0-9._-]/-}"
+  printf '%s' "$DIST_DIR/codex-$safe"
 }
 
 write_metadata() {
@@ -442,7 +592,7 @@ read_metadata() {
 }
 
 build_and_install() {
-  local build_dir git_root head_commit short_commit version dist_target bin_candidate
+  local build_dir git_root head_commit build_commit short_commit version dist_target bin_candidate dirty_sig=""
   if [[ -d "$SRC_DIR/codex-rs" ]]; then build_dir="$SRC_DIR/codex-rs"; else build_dir="$SRC_DIR"; fi
   git_root="$SRC_DIR"
 
@@ -454,14 +604,20 @@ build_and_install() {
     err "Unable to determine current commit hash."
     exit 1
   }
-  short_commit="${head_commit:0:12}"
+  build_commit="$head_commit"
+  if ! git -C "$git_root" diff --quiet HEAD -- 2>/dev/null ||
+    ! git -C "$git_root" diff --quiet --cached HEAD -- 2>/dev/null; then
+    dirty_sig="$(git -C "$git_root" status --porcelain 2>/dev/null | sha256sum | cut -c1-8 2>/dev/null || true)"
+    build_commit="${head_commit}-dirty-${dirty_sig}"
+  fi
+  short_commit="${build_commit:0:12}"
   version="$(compute_build_version "$git_root")"
-  dist_target="$(dist_path_for_commit "$head_commit")"
+  dist_target="$(dist_path_for_commit "$build_commit")"
 
-  if [[ $FORCE_REBUILD -ne 1 && "${PREV_COMMIT:-}" == "$head_commit" ]]; then
+  if [[ $FORCE_REBUILD -ne 1 && "${PREV_COMMIT:-}" == "$build_commit" ]]; then
     if [[ -x "$INSTALL_PATH" ]]; then
       log "No upstream changes (commit $short_commit); reusing existing binary."
-      write_metadata "$head_commit" "${PREV_VERSION:-$version}"
+      write_metadata "$build_commit" "${PREV_VERSION:-$version}"
       [[ -x "$dist_target" ]] || install -Dm0755 "$INSTALL_PATH" "$dist_target"
       ln -sfn "$dist_target" "$DIST_DIR/latest"
       return 0
@@ -469,7 +625,7 @@ build_and_install() {
       log "Binary missing but cached artifact exists for commit $short_commit; reinstalling."
       backup_existing
       install -Dm0755 "$dist_target" "$INSTALL_PATH"
-      write_metadata "$head_commit" "${PREV_VERSION:-$version}"
+      write_metadata "$build_commit" "${PREV_VERSION:-$version}"
       ln -sfn "$dist_target" "$DIST_DIR/latest"
       return 0
     else
@@ -486,6 +642,7 @@ build_and_install() {
     if [[ $FORCE_REBUILD -eq 1 ]]; then
       cargo clean || true
     fi
+    cargo fetch --locked >/dev/null 2>&1 || true
     cargo build --release
   )
 
@@ -499,7 +656,7 @@ build_and_install() {
   ln -sfn "$dist_target" "$DIST_DIR/latest"
   backup_existing
   install -Dm0755 "$dist_target" "$INSTALL_PATH"
-  write_metadata "$head_commit" "$version"
+  write_metadata "$build_commit" "$version"
   log "Installed → $INSTALL_PATH (commit $short_commit, version $version)"
 }
 
@@ -532,7 +689,11 @@ main() {
   ensure_paths
   configure_build_tweaks
   resolve_cc_cxx
-  fetch_repo
+  if [[ -n "$WORKSPACE_DIR" ]]; then
+    prepare_workspace_repo
+  else
+    fetch_repo
+  fi
   build_and_install
   verify
   report_path_conflicts
