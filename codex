@@ -47,6 +47,7 @@ REAL_BIN="${CODEX_BIN:-$REAL_BIN_DEFAULT}"
 AUTO_INTERVAL="${CODEX_WRAPPER_AUTO_INTERVAL:-86400}"
 AUTO_PREF="${CODEX_WRAPPER_AUTO_UPDATE:-1}"
 ALWAYS_UPDATE_DEFAULT_RAW="${CODEX_WRAPPER_ALWAYS_UPDATE:-0}"
+USE_DEV_WORKSPACE_RAW="${CODEX_WRAPPER_USE_DEV_WORKSPACE:-0}"
 
 case "${ALWAYS_UPDATE_DEFAULT_RAW,,}" in
   0 | false | off | no)
@@ -54,6 +55,15 @@ case "${ALWAYS_UPDATE_DEFAULT_RAW,,}" in
     ;;
   *)
     ALWAYS_UPDATE_DEFAULT=1
+    ;;
+esac
+
+case "${USE_DEV_WORKSPACE_RAW,,}" in
+  1 | true | on | yes)
+    USE_DEV_WORKSPACE=1
+    ;;
+  *)
+    USE_DEV_WORKSPACE=0
     ;;
 esac
 
@@ -92,6 +102,7 @@ Environment knobs:
   CODEX_WRAPPER_AUTO_UPDATE=0   disable interval-based background updates (default on, 24h cadence).
   CODEX_WRAPPER_AUTO_INTERVAL   seconds between background updates (default 86400).
   CODEX_WRAPPER_ALWAYS_UPDATE   force updater before every launch (default 0; set 1 to enable).
+  CODEX_WRAPPER_USE_DEV_WORKSPACE=1 opt-in to build from ~/development/codex-updater (default off).
 USAGE
 }
 
@@ -211,7 +222,7 @@ main() {
   if [[ -z ${CODEX_SKIP_BUILD_DEPS+x} ]]; then
     UPDATER_ENV_VARS+=("CODEX_SKIP_BUILD_DEPS=1")
   fi
-  if [[ -z ${CODEX_WORKSPACE+x} && -n ${DEV_WORKSPACE:-} ]]; then
+  if [[ -z ${CODEX_WORKSPACE+x} && $USE_DEV_WORKSPACE -eq 1 && -n ${DEV_WORKSPACE:-} ]]; then
     UPDATER_ENV_VARS+=("CODEX_WORKSPACE=$DEV_WORKSPACE")
     if [[ -z ${CODEX_WORKSPACE_SYNC+x} ]]; then
       UPDATER_ENV_VARS+=("CODEX_WORKSPACE_SYNC=0")
@@ -265,7 +276,7 @@ main() {
   fi
 
   if ((run_update)); then
-    printf '[codex-wrapper] running updater before launch (set CODEX_WRAPPER_ALWAYS_UPDATE=1 to make this default)\n' >&2
+    printf '[codex-wrapper] running updater before launch (set CODEX_WRAPPER_ALWAYS_UPDATE=1 to force this every time)\n' >&2
     run_updater "${updater_args[@]}"
   else
     maybe_auto_update "$skip_auto" "${updater_args[@]}"

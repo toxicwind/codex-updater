@@ -28,6 +28,10 @@ Make the OpenAI Codex CLI your own without playing tag with upstream releases.
 - Tag-/commit-aware versions: `codex --version` surfaces Git tags when available, otherwise `<YYYY.MMDD.HHMM+sha>` so you know exactly which upstream commit is installed  
 - Cross-distro bootstrap (apt, dnf/dnf5/yum, pacman, zypper, apk, Linuxbrew)  
 - Wrapper UX: on-demand updates, background auto-update, and logs with build info  
+- Dev workspace is now opt-in: set `CODEX_WRAPPER_USE_DEV_WORKSPACE=1` if you truly want
+  builds to come from `~/development/codex-updater`; by default the wrapper now pulls
+  the cached upstream clone so `codex resume` (and every other command) no longer
+  triggers a full rebuild whenever your local checkout is dirty.
 - **Multi-OS CI**: patch + build + smoke tests on Linux and macOS across Node LTSes  
 
 ## Requirements
